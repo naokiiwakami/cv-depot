@@ -14,8 +14,29 @@
 // Interrupt handler declarations
 CY_ISR_PROTO(SwitchHandler);
 
-static int32_t current = 101;
-static uint8_t encoder_value = 0;
+#define MODE_NORMAL 0
+#define MODE_MENU_SELECTING 1
+#define MODE_MENU_SELECTED 2
+#define MODE_MIDI_CHANNEL_SETUP 3
+#define MODE_MIDI_CHANNEL_CONFIRMED 4
+
+static uint8_t mode = MODE_NORMAL;
+
+typedef struct menu {
+    const char *name;
+    void (*func)();
+} menu_t;
+
+static void Diagnose();
+static void SetMidiChannel();
+
+static int8_t menu_item = -1;
+
+static menu_t menus[] = {
+    { "ch ", SetMidiChannel },
+    { "dgn", Diagnose },
+    { NULL, NULL },
+};
 
 /*---------------------------------------------------------*/
 /* MIDI decoder                                            */
@@ -70,7 +91,7 @@ volatile uint8_t midi_channel;     // MIDI channel (= status & 0x0F)
 volatile uint8_t target_midi_channel; // The decoder picks up only this channel
 
 volatile uint8_t midi_data[2];     // MIDI data buffer
-volatile uint8_t midi_data_ptr;    // MIDI data buffer pointer
+volatile uint8_t midi_data_position;    // MIDI data buffer pointer
 volatile uint8_t midi_data_length; // Expected MIDI data length
 
 /*---------------------------------------------------------*/
@@ -100,12 +121,14 @@ void InitMidiControllers()
     voice_CurrentNote = 68;  // A4
     // set_cv();
 
-    // Set target MIDI channel.  If the button is on, we read the channel from the octave switch.
-    // Otherwise the channel is 1 (but the internal value is zero based).
     target_midi_channel = 0;
 
-    // GATE1_OFF();
-    Pin_Gate_1_Write(1);
+    // Gates
+    Pin_Gate_1_Write(0);
+    Pin_Gate_2_Write(0);
+    
+    // Portament
+    Pin_Portament_En_Write(0);
 }
 
 void NoteOff(uint8_t note_number)
@@ -113,7 +136,7 @@ void NoteOff(uint8_t note_number)
     LED_Driver_1_PutChar7Seg('F', 0);
     LED_Driver_1_Write7SegNumberHex(note_number, 1, 2, LED_Driver_1_RIGHT_ALIGN);
     DVDAC_Velocity_1_SetValue(2040);
-    Pin_Gate_1_Write(1);
+    Pin_Gate_1_Write(0);
 }
 
 void NoteOn(uint8_t note_number, uint8_t velocity)
@@ -123,16 +146,14 @@ void NoteOn(uint8_t note_number, uint8_t velocity)
         NoteOff(note_number);
         return;
     }
-    LED_Driver_1_Write7SegNumberDec(velocity, 0, 3, LED_Driver_1_RIGHT_ALIGN);
-    /*
+    // LED_Driver_1_Write7SegNumberDec(velocity, 0, 3, LED_Driver_1_RIGHT_ALIGN);
     LED_Driver_1_PutChar7Seg('N', 0);
     LED_Driver_1_Write7SegNumberHex(note_number, 1, 2, LED_Driver_1_RIGHT_ALIGN);
-    */
     PWM_Notes_WriteCompare1(note_number);
     PWM_Indicators_WriteCompare1(velocity);
     DVDAC_Velocity_1_SetValue(2040 - velocity * 16);
     // PWM_Notes_WriteCompare2(255 - velocity * 2);
-    Pin_Gate_1_Write(0);
+    Pin_Gate_1_Write(1);
 }
 
 void ControlChange(uint8_t control_number, uint8_t value)
@@ -172,21 +193,22 @@ void HandleMidiChannelMessage()
 static void ConsumeMidiByte(uint16_t rx_byte)
 {
     if (rx_byte >= TIMINIG_CLOCK) {
-      // we break here to avoid the system real-time message affects the midi_status.
+      // Ignore system real-time messages (yet)
       return;
     }
   
+    // Ignore system messages
     if (IsSystemExclusive(midi_status)) {
         if (rx_byte == SYSEX_OUT) {
             midi_status = SYSEX_OUT;
         }
-        return; // ignore any sysex data
+        return;
     }
-
+    
     if (rx_byte > SYSEX_IN) {
         midi_status = rx_byte;
-        midi_data_length = 1; // We don't really parse system, skip every byte
-        midi_data_ptr = 0;
+        midi_data_length = 1; // Just read and trash data byte
+        midi_data_position = 0;
         return;
     }
 
@@ -196,7 +218,7 @@ static void ConsumeMidiByte(uint16_t rx_byte)
     }
 
     if (rx_byte > DATA_MAX_VALUE) {
-        // it's a new message
+        // This is a status byte of a channel message
         midi_status = rx_byte;
         midi_channel = RetrieveChannelFromStatus(midi_status);
         midi_message = RetrieveMessageFromStatus(midi_status);
@@ -215,20 +237,55 @@ static void ConsumeMidiByte(uint16_t rx_byte)
             midi_data_length = 1;
             break;
         }
-        midi_data_ptr = 0;
+        
+        // Reset the data index
+        midi_data_position = 0;
         return;
     }
 
     // The byte is data if we reach here
-    midi_data[midi_data_ptr++] = rx_byte;
-    if (midi_data_ptr ==  midi_data_length) {
-        midi_data_ptr = 0;
+    midi_data[midi_data_position++] = rx_byte;
+    if (midi_data_position ==  midi_data_length) {
+        midi_data_position = 0;
 
         // We handle the data
         if (IsChannelStatus(midi_status)) {
             HandleMidiChannelMessage();
         }
     }
+}
+
+void Diagnose() {
+    Pin_Gate_1_Write(1);
+    Pin_Gate_2_Write(1);
+    const int32_t weight = 1 << 20;
+    for (int32_t counter = 0; counter < 16 * weight; ++counter) {
+        if (counter % weight != 0) {
+            continue;
+        }
+        int8_t value = counter / weight;
+        LED_Driver_1_Write7SegDigitHex(value, 0);
+        LED_Driver_1_Write7SegDigitHex(value, 1);
+        LED_Driver_1_Write7SegDigitHex(value, 2);
+        Pin_Encoder_LED_1_Write(1 - value / 8);
+        Pin_Encoder_LED_2_Write(value / 8);
+        PWM_Indicators_WriteCompare1(value * 8 - 1);
+        PWM_Indicators_WriteCompare2(value * 8 - 1);
+        Pin_Gate_1_Write(1);
+        Pin_Gate_2_Write(1);
+    }
+    Pin_Gate_1_Write(0);
+    Pin_Gate_2_Write(0);
+    Pin_Encoder_LED_1_Write(0);
+    Pin_Encoder_LED_2_Write(0);
+    LED_Driver_1_ClearDisplayAll();
+}
+
+void SetMidiChannel() {
+    Pin_Encoder_LED_2_Write(1);
+    int16_t encoder_value = target_midi_channel;
+    QuadDec_SetCounter(encoder_value + 16384);
+    mode = MODE_MIDI_CHANNEL_SETUP;
 }
 
 int main(void)
@@ -239,11 +296,18 @@ int main(void)
     InitMidiControllers();
     UART_Midi_Start();
     LED_Driver_1_Start();
-    LED_Driver_1_Write7SegNumberDec(current, 0, 3, LED_Driver_1_RIGHT_ALIGN);
+    LED_Driver_1_SetBrightness(70, 0);
+    LED_Driver_1_SetBrightness(70, 1);
+    LED_Driver_1_SetBrightness(70, 2);
     Pin_Portament_En_Write(0);
+    Pin_LED_Write(1);
+    Pin_Resistor_Select_Note_1_Write(1);
+    Pin_Resistor_Select_Note_2_Write(1);
+    Pin_Resistor_Select_Portament_1_Write(1);
+    Pin_Resistor_Select_Portament_2_Write(1);
+    
     isr_SW_StartEx(SwitchHandler);
     QuadDec_Start();
-    Pin_LED_Write(1);
     PWM_Notes_Start();
     PWM_Bend_Start();
     PWM_Indicators_Start();
@@ -252,66 +316,61 @@ int main(void)
     DVDAC_Expression_Start();
     DVDAC_Modulation_Start();
 
-    for(;;)
-    {
+    for (;;) {
         uint8_t status = UART_Midi_ReadRxStatus();
         if (status & UART_Midi_RX_STS_FIFO_NOTEMPTY) {
             uint8_t rx_byte = UART_Midi_ReadRxData();
             ConsumeMidiByte(rx_byte);
         }
-        int16_t counter_value = QuadDec_GetCounter();
-        if (counter_value <= 0) {
-            QuadDec_SetCounter(1);
-            counter_value = 1;
+        switch (mode) {
+        case MODE_MENU_SELECTING: {
+            int16_t counter_value = QuadDec_GetCounter();
+            uint8_t temp = counter_value % (sizeof(menus) / sizeof(menu_t) - 1);
+            LED_Driver_1_WriteString7Seg(menus[temp].name, 0);
+            break;
         }
-        /*
-        if (counter_value > 60) {
-            counter_value = 0;
-            QuadDec_SetCounter(counter_value);
+        case MODE_MENU_SELECTED: {
+            if (menu_item >= 0) {
+                uint8_t temp = menu_item;
+                menu_item = -1;
+                menus[temp].func();
+            }
+            break;
         }
-        */
-        if (counter_value >= 120) {
-            counter_value = 120;
-            QuadDec_SetCounter(counter_value);
+        case MODE_MIDI_CHANNEL_SETUP: {
+            int16_t counter_value = QuadDec_GetCounter();
+            target_midi_channel = counter_value % 16;
+            LED_Driver_1_Write7SegNumberDec(target_midi_channel + 1, 1, 2, LED_Driver_1_RIGHT_ALIGN);
+            break;
         }
-        status = counter_value;
-        if (status != encoder_value) {
-            LED_Driver_1_Write7SegNumberDec(status, 0, 3, LED_Driver_1_RIGHT_ALIGN);
-            PWM_Notes_WriteCompare1(status);
-            // PWM_Notes_WriteCompare2(120 - status);
-            // PWM_Indicators_WriteCompare1(status);
-            encoder_value = status;
-            DVDAC_Velocity_1_SetValue(status * 17);
+        case MODE_MIDI_CHANNEL_CONFIRMED:
+            LED_Driver_1_ClearDisplayAll();
+            mode = MODE_NORMAL;
+            break;
         }
-        
-        // Pin_LED_Write(Pin_Adjustment_In_Read() ^ 0x1);
     }
 }
 
 CY_ISR(SwitchHandler)
 {
-    // current += 101;
-    // LED_Driver_1_Write7SegNumberDec(current, 0, 3, LED_Driver_1_RIGHT_ALIGN);
-    uint8_t gate_level = Pin_LED_Read() ^ 0x1;
-    Pin_LED_Write(gate_level);
-    // Gate 1 adjustment
-    Pin_Gate_1_Write(gate_level);
-    int16_t velocity;
-    if (gate_level) {
-        velocity = QuadDec_GetCounter() * 17;
-    } else {
-        velocity = 0;
+    switch (mode) {
+    case MODE_NORMAL:
+        QuadDec_SetCounter(0);
+        mode = MODE_MENU_SELECTING;
+        Pin_Encoder_LED_1_Write(1);
+        break;
+    case MODE_MENU_SELECTING: {
+        int16_t counter_value = QuadDec_GetCounter();
+        menu_item = counter_value % (sizeof(menus) / sizeof(menu_t) - 1);
+        mode = MODE_MENU_SELECTED;
+        Pin_Encoder_LED_1_Write(0);
+        break;
     }
-    DVDAC_Velocity_1_SetValue(velocity);
-    LED_Driver_1_Write7SegNumberHex(velocity, 0, 3, LED_Driver_1_RIGHT_ALIGN);
-    // Pin_Portament_En_Write(Pin_Portament_En_Read() ^ 1);
-/*
-    int16_t counter_value = QuadDec_GetCounter();
-    int8_t status = counter_value + 24;
-    PWM_Notes_WriteCompare1(status);
-    LED_Driver_1_Write7SegNumberDec(status, 0, 3, LED_Driver_1_RIGHT_ALIGN);
-*/
-    // Pin_Gate_2_Write(0);
+    case MODE_MIDI_CHANNEL_SETUP:
+       Pin_Encoder_LED_2_Write(0);
+       mode = MODE_MIDI_CHANNEL_CONFIRMED;
+       break;
+    }
 }
 
 /* [] END OF FILE */

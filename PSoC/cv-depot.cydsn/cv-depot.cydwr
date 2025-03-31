@@ -150,9 +150,9 @@
         <Data key="check_tolerance" value="False" />
         <Data key="clock_version" value="v1" />
         <Data key="derive_type" value="AUTO" />
-        <Data key="desired_freq" value="750" />
+        <Data key="desired_freq" value="192000" />
         <Data key="desired_unit" value="0" />
-        <Data key="divider" value="32000" />
+        <Data key="divider" value="125" />
         <Data key="domain" value="DIGITAL" />
         <Data key="enabled" value="True" />
         <Data key="minus_accuracy" value="0" />
@@ -410,7 +410,7 @@
         <Data key="check_tolerance" value="False" />
         <Data key="clock_version" value="v1" />
         <Data key="derive_type" value="BUILTIN" />
-        <Data key="desired_freq" value="20" />
+        <Data key="desired_freq" value="24" />
         <Data key="desired_unit" value="6" />
         <Data key="divider" value="0" />
         <Data key="domain" value="DIGITAL" />
@@ -547,7 +547,7 @@
         <Data key="check_tolerance" value="True" />
         <Data key="clock_version" value="v1" />
         <Data key="derive_type" value="BUILTIN" />
-        <Data key="desired_freq" value="20" />
+        <Data key="desired_freq" value="24" />
         <Data key="desired_unit" value="6" />
         <Data key="divider" value="0" />
         <Data key="domain" value="0" />
@@ -639,7 +639,7 @@
       <Data key="178c69a1-a511-49ea-8444-6f09e4c07b8b" value="Pin_Portament_En" />
       <Data key="252f7505-007f-41e9-917f-1ffc80c864de" value="Com" />
       <Data key="292daff4-f5b1-47a9-9925-532b19fd3247" value="Pin_Adjustment_In" />
-      <Data key="331ae19c-a80b-4845-985b-8f531000db89" value="Pin_Encode_LED_1" />
+      <Data key="331ae19c-a80b-4845-985b-8f531000db89" value="Pin_Encoder_LED_1" />
       <Data key="397dc66a-550f-45d0-944e-304acdbe0ce1" value="Pin_Resistor_Select_Note_1" />
       <Data key="854a1e64-1797-4494-a10e-5829069229c0" value="Pin_Modulation" />
       <Data key="872b4563-238f-49fa-b4d7-ab0653de512e" value="CAN_RX" />
@@ -3761,7 +3761,7 @@
     </Group>
     <Group key="5bfaada7-70ee-4f88-b5ef-ae8d19e1d9c5">
       <Group key="0">
-        <Data key="Port Format" value="15,3" />
+        <Data key="Port Format" value="15,2" />
       </Group>
     </Group>
     <Group key="5cdd463d-6b90-4a9a-916a-1bcaffa1b2ef">
@@ -3801,7 +3801,7 @@
     </Group>
     <Group key="40cf8b82-6f70-4c1a-b4a1-ea15683a6cba">
       <Group key="0">
-        <Data key="Port Format" value="15,2" />
+        <Data key="Port Format" value="15,3" />
       </Group>
     </Group>
     <Group key="52f31aa9-2f0a-497d-9a1f-1424095e13e6">

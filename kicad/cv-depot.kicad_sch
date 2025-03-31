@@ -31446,7 +31446,7 @@
 				)
 			)
 		)
-		(property "Value" "2.2k"
+		(property "Value" "1k"
 			(at 105.41 116.84 90)
 			(effects
 				(font
@@ -34909,7 +34909,7 @@
 				)
 			)
 		)
-		(property "Value" "2.2k"
+		(property "Value" "1k"
 			(at 101.854 138.938 90)
 			(effects
 				(font
@@ -37729,7 +37729,7 @@
 				)
 			)
 		)
-		(property "Value" "220"
+		(property "Value" "470"
 			(at 90.17 196.85 90)
 			(effects
 				(font
@@ -43709,7 +43709,7 @@
 				)
 			)
 		)
-		(property "Value" "2.2k"
+		(property "Value" "1k"
 			(at 105.664 95.758 90)
 			(effects
 				(font
@@ -45043,7 +45043,7 @@
 				)
 			)
 		)
-		(property "Value" "2.2k"
+		(property "Value" "1k"
 			(at 101.6 160.02 90)
 			(effects
 				(font
