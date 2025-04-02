@@ -73,10 +73,13 @@ static menu_t menus[] = {
 /* MIDI System Real-Time Messages */
 #define TIMINIG_CLOCK  0xf8  // The lowest number in the real-time messages
 
-#define DATA_MAX_VALUE 0x7F
+#define MAX_DATA_VALUE 0x7F
 
 /* Notes */
 #define C0 0x0B
+
+/* Pitch Bend */
+#define PITCH_BEND_CENTER 0x40
 
 /* Macros used by MIDI decoder */
 #define IsSystemExclusive(status)     ((status) == SYSEX_IN)
@@ -88,7 +91,7 @@ volatile uint8_t midi_status;      // MIDI status
 volatile uint8_t midi_message;     // MIDI message (= status & 0xF0)
 volatile uint8_t midi_channel;     // MIDI channel (= status & 0x0F)
 
-volatile uint8_t target_midi_channel; // The decoder picks up only this channel
+volatile uint8_t basic_midi_channel; // The decoder picks up only this channel
 
 volatile uint8_t midi_data[2];     // MIDI data buffer
 volatile uint8_t midi_data_position;    // MIDI data buffer pointer
@@ -111,35 +114,65 @@ volatile uint8_t  voices_Notes[MAX_NOTE_COUNT];
 volatile uint16_t ctrl_PitchBend;
 volatile uint8_t ctrl_PitchBend_updating;
 
-void InitMidiControllers()
+#define VELOCITY_DAC_VALUE(velocity) ((velocity * velocity) >> 3)
+#define INDICATOR_VALUE(velocity) ((velocity >= 64) ? (velocity - 64) * 2 + 1 : 0)
+
+static void Gate1On(uint8_t velocity)
 {
-    // ctrl_PitchBend = 8192 >> 4; // 0x20 0x00
-    ctrl_PitchBend_updating = 0;
-    // pitch_bend(0x00, 0x40);  // set neutral
-    
+    DVDAC_Velocity_1_SetValue(VELOCITY_DAC_VALUE(velocity));
+    PWM_Indicators_WriteCompare1(INDICATOR_VALUE(velocity));
+    Pin_Gate_1_Write(1);
+}
+
+static void Gate1Off()
+{
+    DVDAC_Velocity_1_SetValue(0);
+    Pin_Gate_1_Write(0);
+}
+
+static void Gate2On(uint8_t velocity)
+{
+    DVDAC_Velocity_2_SetValue(VELOCITY_DAC_VALUE(velocity));
+    PWM_Indicators_WriteCompare2(INDICATOR_VALUE(velocity));
+    Pin_Gate_2_Write(1);
+}
+
+static void Gate2Off()
+{
+    DVDAC_Velocity_2_SetValue(0);
+    Pin_Gate_2_Write(0);
+}
+
+static void InitMidiControllers()
+{    
     voices_NotesCount = 0;
     voice_CurrentNote = 68;  // A4
     // set_cv();
 
-    target_midi_channel = 0;
+    basic_midi_channel = 0;
 
     // Gates
-    Pin_Gate_1_Write(0);
-    Pin_Gate_2_Write(0);
+    Gate1Off();
+    Gate2Off();
+    
+    // Bend
+    // ctrl_PitchBend = 8192 >> 4; // 0x20 0x00
+    ctrl_PitchBend_updating = 0;
+    // pitch_bend(0x00, 0x40);  // set neutral
     
     // Portament
     Pin_Portament_En_Write(0);
 }
 
-void NoteOff(uint8_t note_number)
+static void NoteOff(uint8_t note_number)
 {
     LED_Driver_1_PutChar7Seg('F', 0);
     LED_Driver_1_Write7SegNumberHex(note_number, 1, 2, LED_Driver_1_RIGHT_ALIGN);
-    DVDAC_Velocity_1_SetValue(2040);
-    Pin_Gate_1_Write(0);
+    Gate1Off();
+    Gate2Off();
 }
 
-void NoteOn(uint8_t note_number, uint8_t velocity)
+static void NoteOn(uint8_t note_number, uint8_t velocity)
 {
     // note on with zero velocity means note off
     if (velocity == 0) {
@@ -149,11 +182,13 @@ void NoteOn(uint8_t note_number, uint8_t velocity)
     // LED_Driver_1_Write7SegNumberDec(velocity, 0, 3, LED_Driver_1_RIGHT_ALIGN);
     LED_Driver_1_PutChar7Seg('N', 0);
     LED_Driver_1_Write7SegNumberHex(note_number, 1, 2, LED_Driver_1_RIGHT_ALIGN);
-    PWM_Notes_WriteCompare1(note_number);
-    PWM_Indicators_WriteCompare1(velocity);
-    DVDAC_Velocity_1_SetValue(2040 - velocity * 16);
-    // PWM_Notes_WriteCompare2(255 - velocity * 2);
-    Pin_Gate_1_Write(1);
+    if (note_number > 120) {
+        note_number = 120;
+    }
+    // PWM_Notes_WriteCompare1(120 - note_number);
+    PWM_Notes_WriteCompare2(120 - note_number);
+    Gate1On(velocity);
+    Gate2On(velocity);
 }
 
 void ControlChange(uint8_t control_number, uint8_t value)
@@ -167,7 +202,7 @@ void PitchBend(uint8_t lsb, uint8_t msb)
 void HandleMidiChannelMessage()
 {
     // do nothing for channels that are out of scope
-    if (midi_channel != target_midi_channel) {
+    if (midi_channel != basic_midi_channel) {
         return;
     }
 
@@ -217,7 +252,7 @@ static void ConsumeMidiByte(uint16_t rx_byte)
         return;
     }
 
-    if (rx_byte > DATA_MAX_VALUE) {
+    if (rx_byte > MAX_DATA_VALUE) {
         // This is a status byte of a channel message
         midi_status = rx_byte;
         midi_channel = RetrieveChannelFromStatus(midi_status);
@@ -283,7 +318,7 @@ void Diagnose() {
 
 void SetMidiChannel() {
     Pin_Encoder_LED_2_Write(1);
-    int16_t encoder_value = target_midi_channel;
+    int16_t encoder_value = basic_midi_channel;
     QuadDec_SetCounter(encoder_value + 16384);
     mode = MODE_MIDI_CHANNEL_SETUP;
 }
@@ -296,15 +331,18 @@ int main(void)
     InitMidiControllers();
     UART_Midi_Start();
     LED_Driver_1_Start();
+    // TODO: define the brightness by a macro
     LED_Driver_1_SetBrightness(70, 0);
     LED_Driver_1_SetBrightness(70, 1);
     LED_Driver_1_SetBrightness(70, 2);
     Pin_Portament_En_Write(0);
-    Pin_LED_Write(1);
+    // Pin_LED_Write(1);
     Pin_Resistor_Select_Note_1_Write(1);
     Pin_Resistor_Select_Note_2_Write(1);
     Pin_Resistor_Select_Portament_1_Write(1);
     Pin_Resistor_Select_Portament_2_Write(1);
+    Pin_Adj_En_Write(1);
+    Pin_Adj_S0_Write(1);
     
     isr_SW_StartEx(SwitchHandler);
     QuadDec_Start();
@@ -315,6 +353,8 @@ int main(void)
     DVDAC_Velocity_2_Start();
     DVDAC_Expression_Start();
     DVDAC_Modulation_Start();
+    
+    PWM_Bend_WriteCompare(16384);
 
     for (;;) {
         uint8_t status = UART_Midi_ReadRxStatus();
@@ -339,8 +379,8 @@ int main(void)
         }
         case MODE_MIDI_CHANNEL_SETUP: {
             int16_t counter_value = QuadDec_GetCounter();
-            target_midi_channel = counter_value % 16;
-            LED_Driver_1_Write7SegNumberDec(target_midi_channel + 1, 1, 2, LED_Driver_1_RIGHT_ALIGN);
+            basic_midi_channel = counter_value % 16;
+            LED_Driver_1_Write7SegNumberDec(basic_midi_channel + 1, 1, 2, LED_Driver_1_RIGHT_ALIGN);
             break;
         }
         case MODE_MIDI_CHANNEL_CONFIRMED:
@@ -348,6 +388,7 @@ int main(void)
             mode = MODE_NORMAL;
             break;
         }
+        Pin_LED_Write(Pin_Adjustment_In_Read());
     }
 }
 
