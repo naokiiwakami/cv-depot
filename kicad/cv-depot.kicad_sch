@@ -24959,7 +24959,7 @@
 		)
 		(uuid "1afdeec6-70e2-47fd-9548-ab11de82ee28")
 	)
-	(label "Resistor P2"
+	(label "Pot P2"
 		(at 285.75 254 0)
 		(effects
 			(font
@@ -25039,7 +25039,7 @@
 		)
 		(uuid "4aed5f10-2445-43d0-acc9-b01365c9bfdf")
 	)
-	(label "Resistor U{slash}D"
+	(label "Pot U{slash}D"
 		(at 285.75 259.08 0)
 		(effects
 			(font
@@ -25089,7 +25089,7 @@
 		)
 		(uuid "5186872c-332e-4638-98f4-ac5fedc383c5")
 	)
-	(label "Resistor P1"
+	(label "Pot P1"
 		(at 285.75 256.54 0)
 		(effects
 			(font
@@ -25099,7 +25099,7 @@
 		)
 		(uuid "5257ae74-d218-47da-b93f-832325c18514")
 	)
-	(label "Resistor N2"
+	(label "Pot N2"
 		(at 285.75 248.92 0)
 		(effects
 			(font
@@ -25139,7 +25139,7 @@
 		)
 		(uuid "630cdfa9-dd54-4925-80ea-697c3a5bbf05")
 	)
-	(label "Resistor N1"
+	(label "Pot N1"
 		(at 285.75 251.46 0)
 		(effects
 			(font

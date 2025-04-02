@@ -10,6 +10,7 @@
  * ========================================
 */
 #include "project.h"
+#include "pot.h"
 
 // Interrupt handler declarations
 CY_ISR_PROTO(SwitchHandler);
@@ -325,10 +326,18 @@ void SetMidiChannel() {
 
 int main(void)
 {
+    // queue of pot objects pending for updates.
+    pot_t *pending_pots[2];
+    
     CyGlobalIntEnable; /* Enable global interrupts. */
 
     // Initialization ////////////////////////////////////
     InitMidiControllers();
+    PotInit();
+    PotChangeTargetPosition(&pot_portament_1, 0);
+    pending_pots[0] = &pot_portament_1;
+    PotChangeTargetPosition(&pot_portament_2, 0);
+    pending_pots[1] = &pot_portament_2;
     UART_Midi_Start();
     LED_Driver_1_Start();
     // TODO: define the brightness by a macro
@@ -336,13 +345,8 @@ int main(void)
     LED_Driver_1_SetBrightness(70, 1);
     LED_Driver_1_SetBrightness(70, 2);
     Pin_Portament_En_Write(0);
-    // Pin_LED_Write(1);
-    Pin_Resistor_Select_Note_1_Write(1);
-    Pin_Resistor_Select_Note_2_Write(1);
-    Pin_Resistor_Select_Portament_1_Write(1);
-    Pin_Resistor_Select_Portament_2_Write(1);
-    Pin_Adj_En_Write(1);
-    Pin_Adj_S0_Write(1);
+    Pin_Adj_En_Write(0);
+    Pin_Adj_S0_Write(0);
     
     isr_SW_StartEx(SwitchHandler);
     QuadDec_Start();
@@ -354,7 +358,7 @@ int main(void)
     DVDAC_Expression_Start();
     DVDAC_Modulation_Start();
     
-    PWM_Bend_WriteCompare(16384);
+   //  PWM_Bend_WriteCompare(16384);
 
     for (;;) {
         uint8_t status = UART_Midi_ReadRxStatus();
@@ -389,6 +393,10 @@ int main(void)
             break;
         }
         Pin_LED_Write(Pin_Adjustment_In_Read());
+        if (pending_pots[0] && PotUpdate(pending_pots[0])) {
+            pending_pots[0] = pending_pots[1];
+            pending_pots[1] = NULL;
+        }
     }
 }
 
