@@ -13,6 +13,7 @@
 #include "project.h"
 #include "pot.h"
 
+// available pots - these are external and referred by the main program
 pot_t pot_note_1;
 pot_t pot_note_2;
 pot_t pot_portament_1;

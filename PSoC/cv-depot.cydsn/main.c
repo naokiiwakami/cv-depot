@@ -10,32 +10,43 @@
  * ========================================
 */
 #include "project.h"
+
+#include "eeprom_addr.h"
 #include "pot.h"
 
 // Interrupt handler declarations
 CY_ISR_PROTO(SwitchHandler);
 
-#define MODE_NORMAL 0
-#define MODE_MENU_SELECTING 1
-#define MODE_MENU_SELECTED 2
-#define MODE_MIDI_CHANNEL_SETUP 3
-#define MODE_MIDI_CHANNEL_CONFIRMED 4
+// Misc setup parameters
+#define LED_DRIVER_BRIGHTNESS 70
 
-static uint8_t mode = MODE_NORMAL;
+// Firmware runtime modes
+enum ProgramMode {
+    MODE_NORMAL = 0,
+    MODE_MENU_SELECTING,
+    MODE_MENU_SELECTED,
+    MODE_MIDI_CHANNEL_SETUP,
+    MODE_MIDI_CHANNEL_CONFIRMED,
+    MODE_CALIBRATION,
+};
+
+static volatile uint8_t mode = MODE_NORMAL;
 
 typedef struct menu {
     const char *name;
     void (*func)();
 } menu_t;
 
-static void Diagnose();
 static void SetMidiChannel();
+static void Calibrate();
+static void Diagnose();
 
 static int8_t menu_item = -1;
 
 static menu_t menus[] = {
-    { "ch ", SetMidiChannel },
-    { "dgn", Diagnose },
+    { "ch ", SetMidiChannel }, // set MIDI channel
+    { "cal", Calibrate }, // calibrate bend center position
+    { "dgn", Diagnose }, // diagnose hardware
     { NULL, NULL },
 };
 
@@ -88,15 +99,15 @@ static menu_t menus[] = {
 #define RetrieveMessageFromStatus(status)  ((status) & 0xF0)
 #define RetrieveChannelFromStatus(status)  ((status) & 0x0F)
 
-volatile uint8_t midi_status;      // MIDI status
-volatile uint8_t midi_message;     // MIDI message (= status & 0xF0)
-volatile uint8_t midi_channel;     // MIDI channel (= status & 0x0F)
+static uint8_t midi_status;      // MIDI status
+static uint8_t midi_message;     // MIDI message (= status & 0xF0)
+static uint8_t midi_channel;     // MIDI channel (= status & 0x0F)
 
-volatile uint8_t basic_midi_channel; // The decoder picks up only this channel
+static uint8_t basic_midi_channel; // The decoder picks up only this channel
 
-volatile uint8_t midi_data[2];     // MIDI data buffer
-volatile uint8_t midi_data_position;    // MIDI data buffer pointer
-volatile uint8_t midi_data_length; // Expected MIDI data length
+static uint8_t midi_data[2];        // MIDI data buffer
+static uint8_t midi_data_position;  // MIDI data buffer pointer
+static uint8_t midi_data_length;    // Expected MIDI data length
 
 /*---------------------------------------------------------*/
 /* Controllers                                             */
@@ -104,19 +115,21 @@ volatile uint8_t midi_data_length; // Expected MIDI data length
 #define MAX_NOTE_COUNT 8
 
 // Voice controller
-volatile uint8_t  voice_CurrentNote;
-volatile uint8_t  voices_NotesCount;
-volatile uint8_t  voices_Notes[MAX_NOTE_COUNT];
+static uint8_t  voice_CurrentNote;
+static uint8_t  voices_NotesCount;
+static uint8_t  voices_Notes[MAX_NOTE_COUNT];
 
 // other controller values
 // Note that these values are not always equivalent to actual
 // CV values since we apply anti-click mechanism to the CV values in
 // transition to make the pitch change smooth.
-volatile uint16_t ctrl_PitchBend;
-volatile uint8_t ctrl_PitchBend_updating;
+static int16_t ctrl_PitchBend;
+static uint8_t ctrl_PitchBend_updating;
+static uint16_t bend_offset;
 
-#define VELOCITY_DAC_VALUE(velocity) ((velocity * velocity) >> 3)
-#define INDICATOR_VALUE(velocity) ((velocity >= 64) ? (velocity - 64) * 2 + 1 : 0)
+#define VELOCITY_DAC_VALUE(velocity) (((velocity) * (velocity)) >> 3)
+#define INDICATOR_VALUE(velocity) ((velocity) >= 64 ? ((velocity) - 64) * 2 + 1 : 0)
+#define NOTE_PWM_MAX_VALUE 120
 
 static void Gate1On(uint8_t velocity)
 {
@@ -144,27 +157,6 @@ static void Gate2Off()
     Pin_Gate_2_Write(0);
 }
 
-static void InitMidiControllers()
-{    
-    voices_NotesCount = 0;
-    voice_CurrentNote = 68;  // A4
-    // set_cv();
-
-    basic_midi_channel = 0;
-
-    // Gates
-    Gate1Off();
-    Gate2Off();
-    
-    // Bend
-    // ctrl_PitchBend = 8192 >> 4; // 0x20 0x00
-    ctrl_PitchBend_updating = 0;
-    // pitch_bend(0x00, 0x40);  // set neutral
-    
-    // Portament
-    Pin_Portament_En_Write(0);
-}
-
 static void NoteOff(uint8_t note_number)
 {
     LED_Driver_1_PutChar7Seg('F', 0);
@@ -183,21 +175,61 @@ static void NoteOn(uint8_t note_number, uint8_t velocity)
     // LED_Driver_1_Write7SegNumberDec(velocity, 0, 3, LED_Driver_1_RIGHT_ALIGN);
     LED_Driver_1_PutChar7Seg('N', 0);
     LED_Driver_1_Write7SegNumberHex(note_number, 1, 2, LED_Driver_1_RIGHT_ALIGN);
-    if (note_number > 120) {
-        note_number = 120;
+    if (note_number > NOTE_PWM_MAX_VALUE) {
+        note_number = NOTE_PWM_MAX_VALUE;
     }
-    // PWM_Notes_WriteCompare1(120 - note_number);
-    PWM_Notes_WriteCompare2(120 - note_number);
+    // PWM_Notes_WriteCompare1(NOTE_PWM_MAX_VALUE - note_number);
+    PWM_Notes_WriteCompare2(note_number);
     Gate1On(velocity);
     Gate2On(velocity);
 }
 
-void ControlChange(uint8_t control_number, uint8_t value)
+static void ControlChange(uint8_t control_number, uint8_t value)
 {
 }
 
-void PitchBend(uint8_t lsb, uint8_t msb)
+static void BendPitch(uint8_t lsb, uint8_t msb)
 {
+    PWM_Bend_WriteCompare(bend_offset);
+}
+static void InitMidiParameters()
+{
+    voices_NotesCount = 0;
+    voice_CurrentNote = 68;  // A4
+    // set_cv();
+
+    // Bend
+    // ctrl_PitchBend = 8192 >> 4; // 0x20 0x00
+    ctrl_PitchBend_updating = 0;
+    
+    // Portament
+    Pin_Portament_En_Write(0);
+}
+
+static void InitMidiControllers()
+{
+    // Basic MIDI channel
+    basic_midi_channel = EEPROM_ReadByte(ADDR_MIDI_CH);
+    if (basic_midi_channel >= 16) {
+        basic_midi_channel = 0;
+    }
+
+    uint8_t temp = EEPROM_ReadByte(ADDR_BEND_OFFSET);
+    if (temp == 0xd1) {
+        temp = EEPROM_ReadByte(ADDR_BEND_OFFSET + 1);
+        bend_offset = temp << 8;
+        temp = EEPROM_ReadByte(ADDR_BEND_OFFSET + 2);
+        bend_offset += temp;
+    } else { // initial value
+        bend_offset = 16384;
+    }
+    
+    // Gates
+    Gate1Off();
+    Gate2Off();
+    
+    // Bend
+    BendPitch(0x00, PITCH_BEND_CENTER);  // set neutral
 }
 
 void HandleMidiChannelMessage()
@@ -218,7 +250,7 @@ void HandleMidiChannelMessage()
         ControlChange(midi_data[0], midi_data[1]);
         break;
     case MSG_PITCH_BEND:
-        PitchBend(midi_data[0], midi_data[1]);
+        BendPitch(midi_data[0], midi_data[1]);
         break;
     default:
         // do nothing for unsupported channel messages
@@ -291,6 +323,53 @@ static void ConsumeMidiByte(uint16_t rx_byte)
     }
 }
 
+void SetMidiChannel()
+{
+    mode = MODE_MIDI_CHANNEL_SETUP;
+    Pin_Encoder_LED_2_Write(1);
+    int16_t encoder_value = basic_midi_channel;
+    QuadDec_SetCounter(encoder_value + 16384);
+}
+
+void Calibrate()
+{
+    mode = MODE_CALIBRATION;
+    Pin_Encoder_LED_2_Write(1);
+    
+    // set the lowest note
+    PWM_Notes_WriteCompare1(0);
+    PWM_Notes_WriteCompare2(0);
+    
+    // set the bend center position
+    PWM_Bend_WriteCompare(bend_offset);
+    
+    QuadDec_SetCounter(bend_offset);
+    
+    // We defer any other requests until the calibration ends. So we loop locally here
+    while (mode == MODE_CALIBRATION) {
+        int16_t counter_value = QuadDec_GetCounter();
+        if (counter_value != bend_offset) {
+            bend_offset = counter_value;
+            PWM_Bend_WriteCompare(bend_offset);
+        }
+    }
+    
+    // save the offset to EEPROM, in big endian manner
+    EEPROM_WriteByte(0xd1, ADDR_BEND_OFFSET);  // indicates data is available
+    EEPROM_WriteByte((bend_offset >> 8) & 0xff, ADDR_BEND_OFFSET + 1);
+    EEPROM_WriteByte(bend_offset & 0xff, ADDR_BEND_OFFSET + 2);
+    
+    PWM_Notes_WriteCompare1(36);
+    PWM_Notes_WriteCompare2(36);
+    
+    Pin_Adj_S0_Write(0);
+    Pin_Adj_En_Write(1);
+    
+    CyDelay(1);
+    Pin_LED_Write(Pin_Adjustment_In_Read());
+    Pin_Encoder_LED_2_Write(0);
+}
+
 void Diagnose() {
     Pin_Gate_1_Write(1);
     Pin_Gate_2_Write(1);
@@ -315,35 +394,33 @@ void Diagnose() {
     Pin_Encoder_LED_1_Write(0);
     Pin_Encoder_LED_2_Write(0);
     LED_Driver_1_ClearDisplayAll();
-}
-
-void SetMidiChannel() {
-    Pin_Encoder_LED_2_Write(1);
-    int16_t encoder_value = basic_midi_channel;
-    QuadDec_SetCounter(encoder_value + 16384);
-    mode = MODE_MIDI_CHANNEL_SETUP;
+    mode = MODE_NORMAL;
 }
 
 int main(void)
 {
-    // queue of pot objects pending for updates.
-    pot_t *pending_pots[2];
+    // Queue of pot objects pending for updates.
+    uint8_t pending_pot_head = 0;
+    uint8_t pending_pot_tail = 0;
+    uint8_t pot_queue_overflow = 0;
+    const int kPotsQueueSize = 4;
+    pot_t *pending_pots[kPotsQueueSize];
     
     CyGlobalIntEnable; /* Enable global interrupts. */
 
     // Initialization ////////////////////////////////////
-    InitMidiControllers();
+    EEPROM_Start();
+    InitMidiParameters();
     PotInit();
     PotChangeTargetPosition(&pot_portament_1, 0);
-    pending_pots[0] = &pot_portament_1;
+    pending_pots[pending_pot_tail++] = &pot_portament_1;
     PotChangeTargetPosition(&pot_portament_2, 0);
-    pending_pots[1] = &pot_portament_2;
+    pending_pots[pending_pot_tail++] = &pot_portament_2;
     UART_Midi_Start();
     LED_Driver_1_Start();
-    // TODO: define the brightness by a macro
-    LED_Driver_1_SetBrightness(70, 0);
-    LED_Driver_1_SetBrightness(70, 1);
-    LED_Driver_1_SetBrightness(70, 2);
+    LED_Driver_1_SetBrightness(LED_DRIVER_BRIGHTNESS, 0);
+    LED_Driver_1_SetBrightness(LED_DRIVER_BRIGHTNESS, 1);
+    LED_Driver_1_SetBrightness(LED_DRIVER_BRIGHTNESS, 2);
     Pin_Portament_En_Write(0);
     Pin_Adj_En_Write(0);
     Pin_Adj_S0_Write(0);
@@ -358,7 +435,7 @@ int main(void)
     DVDAC_Expression_Start();
     DVDAC_Modulation_Start();
     
-   //  PWM_Bend_WriteCompare(16384);
+    InitMidiControllers();
 
     for (;;) {
         uint8_t status = UART_Midi_ReadRxStatus();
@@ -388,14 +465,24 @@ int main(void)
             break;
         }
         case MODE_MIDI_CHANNEL_CONFIRMED:
+            Pin_Encoder_LED_2_Write(0);
+            EEPROM_UpdateTemperature();
+            EEPROM_WriteByte(basic_midi_channel, ADDR_MIDI_CH);
             LED_Driver_1_ClearDisplayAll();
             mode = MODE_NORMAL;
             break;
         }
-        Pin_LED_Write(Pin_Adjustment_In_Read());
-        if (pending_pots[0] && PotUpdate(pending_pots[0])) {
-            pending_pots[0] = pending_pots[1];
-            pending_pots[1] = NULL;
+        
+        // Pin_Encoder_LED_1_Write(!Pin_Pot_Select_Portament_1_Read());
+        // Pin_Encoder_LED_2_Write(!Pin_Pot_Select_Portament_2_Read());
+        // Pin_LED_Write(Pin_Pot_UD_Read());
+        
+        // Consume pot queue items if not empty
+        if (pending_pot_head != pending_pot_tail || pot_queue_overflow) {
+            if (PotUpdate(pending_pots[pending_pot_head])) {
+                pending_pot_head = (pending_pot_head + 1) % kPotsQueueSize;
+                pot_queue_overflow = 0;
+            }
         }
     }
 }
@@ -416,9 +503,11 @@ CY_ISR(SwitchHandler)
         break;
     }
     case MODE_MIDI_CHANNEL_SETUP:
-       Pin_Encoder_LED_2_Write(0);
-       mode = MODE_MIDI_CHANNEL_CONFIRMED;
-       break;
+        mode = MODE_MIDI_CHANNEL_CONFIRMED;
+        break;
+    case MODE_CALIBRATION:
+        mode = MODE_NORMAL;
+        break;
     }
 }
 
