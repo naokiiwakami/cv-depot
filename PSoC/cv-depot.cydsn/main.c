@@ -18,7 +18,7 @@
 CY_ISR_PROTO(SwitchHandler);
 
 // Misc setup parameters
-#define LED_DRIVER_BRIGHTNESS 70
+#define LED_Driver_BRIGHTNESS 70
 
 // Firmware runtime modes
 enum ProgramMode {
@@ -159,8 +159,8 @@ static void Gate2Off()
 
 static void NoteOff(uint8_t note_number)
 {
-    LED_Driver_1_PutChar7Seg('F', 0);
-    LED_Driver_1_Write7SegNumberHex(note_number, 1, 2, LED_Driver_1_RIGHT_ALIGN);
+    LED_Driver_PutChar7Seg('F', 0);
+    LED_Driver_Write7SegNumberHex(note_number, 1, 2, LED_Driver_RIGHT_ALIGN);
     Gate1Off();
     Gate2Off();
 }
@@ -172,9 +172,9 @@ static void NoteOn(uint8_t note_number, uint8_t velocity)
         NoteOff(note_number);
         return;
     }
-    // LED_Driver_1_Write7SegNumberDec(velocity, 0, 3, LED_Driver_1_RIGHT_ALIGN);
-    LED_Driver_1_PutChar7Seg('N', 0);
-    LED_Driver_1_Write7SegNumberHex(note_number, 1, 2, LED_Driver_1_RIGHT_ALIGN);
+    // LED_Driver_Write7SegNumberDec(velocity, 0, 3, LED_Driver_RIGHT_ALIGN);
+    LED_Driver_PutChar7Seg('N', 0);
+    LED_Driver_Write7SegNumberHex(note_number, 1, 2, LED_Driver_RIGHT_ALIGN);
     if (note_number > NOTE_PWM_MAX_VALUE) {
         note_number = NOTE_PWM_MAX_VALUE;
     }
@@ -192,6 +192,7 @@ static void BendPitch(uint8_t lsb, uint8_t msb)
 {
     PWM_Bend_WriteCompare(bend_offset);
 }
+
 static void InitMidiParameters()
 {
     voices_NotesCount = 0;
@@ -379,9 +380,9 @@ void Diagnose() {
             continue;
         }
         int8_t value = counter / weight;
-        LED_Driver_1_Write7SegDigitHex(value, 0);
-        LED_Driver_1_Write7SegDigitHex(value, 1);
-        LED_Driver_1_Write7SegDigitHex(value, 2);
+        LED_Driver_Write7SegDigitHex(value, 0);
+        LED_Driver_Write7SegDigitHex(value, 1);
+        LED_Driver_Write7SegDigitHex(value, 2);
         Pin_Encoder_LED_1_Write(1 - value / 8);
         Pin_Encoder_LED_2_Write(value / 8);
         PWM_Indicators_WriteCompare1(value * 8 - 1);
@@ -393,7 +394,7 @@ void Diagnose() {
     Pin_Gate_2_Write(0);
     Pin_Encoder_LED_1_Write(0);
     Pin_Encoder_LED_2_Write(0);
-    LED_Driver_1_ClearDisplayAll();
+    LED_Driver_ClearDisplayAll();
     mode = MODE_NORMAL;
 }
 
@@ -417,10 +418,10 @@ int main(void)
     PotChangeTargetPosition(&pot_portament_2, 0);
     pending_pots[pending_pot_tail++] = &pot_portament_2;
     UART_Midi_Start();
-    LED_Driver_1_Start();
-    LED_Driver_1_SetBrightness(LED_DRIVER_BRIGHTNESS, 0);
-    LED_Driver_1_SetBrightness(LED_DRIVER_BRIGHTNESS, 1);
-    LED_Driver_1_SetBrightness(LED_DRIVER_BRIGHTNESS, 2);
+    LED_Driver_Start();
+    LED_Driver_SetBrightness(LED_Driver_BRIGHTNESS, 0);
+    LED_Driver_SetBrightness(LED_Driver_BRIGHTNESS, 1);
+    LED_Driver_SetBrightness(LED_Driver_BRIGHTNESS, 2);
     Pin_Portament_En_Write(0);
     Pin_Adj_En_Write(0);
     Pin_Adj_S0_Write(0);
@@ -447,7 +448,7 @@ int main(void)
         case MODE_MENU_SELECTING: {
             int16_t counter_value = QuadDec_GetCounter();
             uint8_t temp = counter_value % (sizeof(menus) / sizeof(menu_t) - 1);
-            LED_Driver_1_WriteString7Seg(menus[temp].name, 0);
+            LED_Driver_WriteString7Seg(menus[temp].name, 0);
             break;
         }
         case MODE_MENU_SELECTED: {
@@ -461,14 +462,14 @@ int main(void)
         case MODE_MIDI_CHANNEL_SETUP: {
             int16_t counter_value = QuadDec_GetCounter();
             basic_midi_channel = counter_value % 16;
-            LED_Driver_1_Write7SegNumberDec(basic_midi_channel + 1, 1, 2, LED_Driver_1_RIGHT_ALIGN);
+            LED_Driver_Write7SegNumberDec(basic_midi_channel + 1, 1, 2, LED_Driver_RIGHT_ALIGN);
             break;
         }
         case MODE_MIDI_CHANNEL_CONFIRMED:
             Pin_Encoder_LED_2_Write(0);
             EEPROM_UpdateTemperature();
             EEPROM_WriteByte(basic_midi_channel, ADDR_MIDI_CH);
-            LED_Driver_1_ClearDisplayAll();
+            LED_Driver_ClearDisplayAll();
             mode = MODE_NORMAL;
             break;
         }
