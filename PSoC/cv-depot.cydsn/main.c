@@ -444,15 +444,15 @@ void Diagnose() {
     mode = MODE_NORMAL;
 }
 
-typedef struct pot_queue_item {
-    uint8_t initial;
+typedef struct pot_change_request {
+    uint8_t requested;
     int8_t target;  // set -1 to ensure to move to the terminal B
     pot_t *pot;
-} pot_queue_item_t;
+} pot_change_request_t;
 
-static void InitPotQueueItem(pot_queue_item_t *item, pot_t *pot, int8_t target)
+static void InitPotChangeRequest(pot_change_request_t *item, pot_t *pot, int8_t target)
 {
-    item->initial = 1;
+    item->requested = 0;
     item->pot = pot;
     item->target = target;
 }
@@ -460,11 +460,11 @@ static void InitPotQueueItem(pot_queue_item_t *item, pot_t *pot, int8_t target)
 int main(void)
 {
     // Queue of pot objects pending for updates.
-    uint8_t pending_pot_head = 0;
-    uint8_t pending_pot_tail = 0;
+    uint8_t request_head = 0;
+    uint8_t request_tail = 0;
     uint8_t pot_queue_overflow = 0;
-    const int kPotsQueueSize = 4;
-    pot_queue_item_t pending_pot_changes[8];
+    const int kPotsQueueSize = 8;
+    pot_change_request_t pot_change_requests[kPotsQueueSize];
     
     CyGlobalIntEnable; /* Enable global interrupts. */
 
@@ -474,13 +474,13 @@ int main(void)
     PotGlobalInit();
     
     // Set pot positions. The pots are not power-cycled on soft reset, so we'll lose
-    // track of actual wiper position. We then force wipers move to terminal B first.
-    InitPotQueueItem(&pending_pot_changes[pending_pot_tail++], &pot_portament_1, -1);
-    InitPotQueueItem(&pending_pot_changes[pending_pot_tail++], &pot_portament_2, -1);
-    InitPotQueueItem(&pending_pot_changes[pending_pot_tail++], &pot_note_1, -1);
-    InitPotQueueItem(&pending_pot_changes[pending_pot_tail++], &pot_note_1, 34);
-    InitPotQueueItem(&pending_pot_changes[pending_pot_tail++], &pot_note_2, -1);
-    InitPotQueueItem(&pending_pot_changes[pending_pot_tail++], &pot_note_2, 32);
+    // track of actual wiper positions. We then force wipers move to terminal B first.
+    InitPotChangeRequest(&pot_change_requests[request_tail++], &pot_portament_1, -1);
+    InitPotChangeRequest(&pot_change_requests[request_tail++], &pot_portament_2, -1);
+    InitPotChangeRequest(&pot_change_requests[request_tail++], &pot_note_1, -1);
+    InitPotChangeRequest(&pot_change_requests[request_tail++], &pot_note_1, 34);
+    InitPotChangeRequest(&pot_change_requests[request_tail++], &pot_note_2, -1);
+    InitPotChangeRequest(&pot_change_requests[request_tail++], &pot_note_2, 32);
     
     UART_Midi_Start();
     LED_Driver_Start();
@@ -543,20 +543,20 @@ int main(void)
         // Pin_Encoder_LED_2_Write(!Pin_Pot_Select_Portament_2_Read());
         // Pin_LED_Write(Pin_Pot_UD_Read());
         
-        // Consume pot queue items if not empty
-        if (pending_pot_head != pending_pot_tail || pot_queue_overflow) {
-            pot_queue_item_t *item = &pending_pot_changes[pending_pot_head];
+        // Consume pot change requests if not empty
+        if (request_head != request_tail || pot_queue_overflow) {
+            pot_change_request_t *item = &pot_change_requests[request_head];
             pot_t *pot = item->pot;
-            if (item->initial) {
+            if (!item->requested) {
                 if (item->target < 0) {
                     PotEnsureToMoveToB(pot);
                 } else {
                     PotSetTargetPosition(pot, item->target);
                 }
-                item->initial = 0;
+                item->requested = 0;
             }
             if (PotUpdate(pot)) {
-                pending_pot_head = (pending_pot_head + 1) % kPotsQueueSize;
+                request_head = (request_head + 1) % kPotsQueueSize;
                 pot_queue_overflow = 0;
             }
         }
