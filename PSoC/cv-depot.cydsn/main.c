@@ -178,7 +178,7 @@ static void NoteOn(uint8_t note_number, uint8_t velocity)
     if (note_number > NOTE_PWM_MAX_VALUE) {
         note_number = NOTE_PWM_MAX_VALUE;
     }
-    // PWM_Notes_WriteCompare1(NOTE_PWM_MAX_VALUE - note_number);
+    PWM_Notes_WriteCompare1(note_number);
     PWM_Notes_WriteCompare2(note_number);
     Gate1On(velocity);
     Gate2On(velocity);
@@ -215,6 +215,7 @@ static void InitMidiControllers()
         basic_midi_channel = 0;
     }
 
+    /*
     uint8_t temp = EEPROM_ReadByte(ADDR_BEND_OFFSET);
     if (temp == 0xd1) {
         temp = EEPROM_ReadByte(ADDR_BEND_OFFSET + 1);
@@ -224,6 +225,8 @@ static void InitMidiControllers()
     } else { // initial value
         bend_offset = 16384;
     }
+    */
+    bend_offset = 16384;
     
     // Gates
     Gate1Off();
@@ -334,6 +337,7 @@ void SetMidiChannel()
 
 void Calibrate()
 {
+    Pin_Portament_En_Write(0);
     mode = MODE_CALIBRATION;
     Pin_Encoder_LED_2_Write(1);
     
@@ -366,9 +370,51 @@ void Calibrate()
     Pin_Adj_S0_Write(0);
     Pin_Adj_En_Write(1);
     
-    CyDelay(1);
-    Pin_LED_Write(Pin_Adjustment_In_Read());
+    CyDelay(1000);
+    uint8_t reading = Pin_Adjustment_In_Read();
+    Pin_LED_Write(reading);
+    LED_Driver_Write7SegNumberDec(pot_note_1.current, 0, 3, LED_Driver_RIGHT_ALIGN);
+    uint8_t delta = reading ? 1 : -1;
+    uint8_t prev_reading;
+    do {
+        PotChangeTargetPosition(&pot_note_1, pot_note_1.current + delta);
+        while (!PotUpdate(&pot_note_1)) {
+            CyDelay(1);
+        }
+        LED_Driver_Write7SegNumberDec(pot_note_1.current, 0, 3, LED_Driver_RIGHT_ALIGN);
+        CyDelay(1000);
+        prev_reading = reading;
+        reading = Pin_Adjustment_In_Read();
+        Pin_LED_Write(reading);
+        break;
+    } while (reading == prev_reading);
+    
     Pin_Encoder_LED_2_Write(0);
+    /*
+    
+    Pin_Adj_S0_Write(1);
+    Pin_Adj_En_Write(1);
+    
+    Pin_Encoder_LED_1_Write(1);
+    CyDelay(1000);
+    reading = Pin_Adjustment_In_Read();
+    Pin_LED_Write(reading);
+    LED_Driver_Write7SegNumberDec(pot_note_2.current, 0, 3, LED_Driver_RIGHT_ALIGN);
+    delta = reading ? -1 : 1;
+    do {
+        PotChangeTargetPosition(&pot_note_2, pot_note_2.current + delta);
+        while (!PotUpdate(&pot_note_1)) {
+            CyDelay(1);
+        }
+        LED_Driver_Write7SegNumberDec(pot_note_2.current, 0, 3, LED_Driver_RIGHT_ALIGN);
+        CyDelay(1000);
+        prev_reading = reading;
+        reading = Pin_Adjustment_In_Read();
+        Pin_LED_Write(reading);
+    } while (reading == prev_reading);
+    */
+    
+    Pin_Encoder_LED_1_Write(0);
 }
 
 void Diagnose() {
@@ -398,6 +444,13 @@ void Diagnose() {
     mode = MODE_NORMAL;
 }
 
+typedef struct pot_queue_item {
+    uint8_t initial;
+    int8_t current;  // set -1 to keep current
+    int8_t target;
+    pot_t *pot;
+} pot_queue_item_t;
+
 int main(void)
 {
     // Queue of pot objects pending for updates.
@@ -405,18 +458,35 @@ int main(void)
     uint8_t pending_pot_tail = 0;
     uint8_t pot_queue_overflow = 0;
     const int kPotsQueueSize = 4;
-    pot_t *pending_pots[kPotsQueueSize];
+    pot_queue_item_t pending_pot_changes[8];
     
     CyGlobalIntEnable; /* Enable global interrupts. */
 
     // Initialization ////////////////////////////////////
     EEPROM_Start();
     InitMidiParameters();
-    PotInit();
-    PotChangeTargetPosition(&pot_portament_1, 0);
-    pending_pots[pending_pot_tail++] = &pot_portament_1;
-    PotChangeTargetPosition(&pot_portament_2, 0);
-    pending_pots[pending_pot_tail++] = &pot_portament_2;
+    PotGlobalInit();
+    pot_queue_item_t *item;
+    item = &pending_pot_changes[pending_pot_tail++];
+    item->initial = 1;
+    item->current = 63;
+    item->target = 0;
+    item->pot = &pot_portament_1;
+    item = &pending_pot_changes[pending_pot_tail++];
+    item->initial = 1;
+    item->current = 63;
+    item->target = 0;
+    item->pot = &pot_portament_2;
+    item = &pending_pot_changes[pending_pot_tail++];
+    item->initial = 1;
+    item->current = 63;
+    item->target = 0;
+    item->pot = &pot_note_1;
+    item = &pending_pot_changes[pending_pot_tail++];
+    item->initial = 1;
+    item->current = -1;
+    item->target = 34;
+    item->pot = &pot_note_1;
     UART_Midi_Start();
     LED_Driver_Start();
     LED_Driver_SetBrightness(LED_Driver_BRIGHTNESS, 0);
@@ -480,7 +550,16 @@ int main(void)
         
         // Consume pot queue items if not empty
         if (pending_pot_head != pending_pot_tail || pot_queue_overflow) {
-            if (PotUpdate(pending_pots[pending_pot_head])) {
+            pot_queue_item_t *item = &pending_pot_changes[pending_pot_head];
+            pot_t *pot = item->pot;
+            if (item->initial) {
+                if (item->current >= 0) {
+                    pot->current = item->current;
+                }
+                pot->target = item->target;
+                item->initial = 0;
+            }
+            if (PotUpdate(pot)) {
                 pending_pot_head = (pending_pot_head + 1) % kPotsQueueSize;
                 pot_queue_overflow = 0;
             }

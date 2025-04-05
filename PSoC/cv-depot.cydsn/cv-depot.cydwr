@@ -15,9 +15,9 @@
         <Data key="enabled" value="True" />
         <Data key="minus_accuracy" value="0" />
         <Data key="minus_tolerance" value="1.5" />
-        <Data key="name" value="CAN_1_Clock" />
+        <Data key="name" value="CAN_Clock" />
         <Data key="named_src_direct_connect" value="True" />
-        <Data key="netlist_name" value="\CAN_1:Clock\" />
+        <Data key="netlist_name" value="\CAN:Clock\" />
         <Data key="placement" value="AUTO" />
         <Data key="plus_accuracy" value="0" />
         <Data key="plus_tolerance" value="1.5" />
@@ -157,8 +157,8 @@
         <Data key="enabled" value="True" />
         <Data key="minus_accuracy" value="0" />
         <Data key="minus_tolerance" value="5" />
-        <Data key="name" value="LED_Driver_1_ClkInternal" />
-        <Data key="netlist_name" value="\LED_Driver_1:ClkInternal\" />
+        <Data key="name" value="LED_Driver_ClkInternal" />
+        <Data key="netlist_name" value="\LED_Driver:ClkInternal\" />
         <Data key="placement" value="AUTO" />
         <Data key="plus_accuracy" value="0" />
         <Data key="plus_tolerance" value="5" />
@@ -180,9 +180,9 @@
         <Data key="enabled" value="True" />
         <Data key="minus_accuracy" value="0" />
         <Data key="minus_tolerance" value="5" />
-        <Data key="name" value="LED_Driver_1_BUS_CLK" />
+        <Data key="name" value="LED_Driver_BUS_CLK" />
         <Data key="named_src_direct_connect" value="True" />
-        <Data key="netlist_name" value="\LED_Driver_1:BUS_CLK\" />
+        <Data key="netlist_name" value="\LED_Driver:BUS_CLK\" />
         <Data key="placement" value="AUTO" />
         <Data key="plus_accuracy" value="0" />
         <Data key="plus_tolerance" value="5" />
@@ -197,9 +197,9 @@
         <Data key="check_tolerance" value="True" />
         <Data key="clock_version" value="v1" />
         <Data key="derive_type" value="AUTO" />
-        <Data key="desired_freq" value="5" />
+        <Data key="desired_freq" value="1" />
         <Data key="desired_unit" value="3" />
-        <Data key="divider" value="4800" />
+        <Data key="divider" value="24000" />
         <Data key="domain" value="DIGITAL" />
         <Data key="enabled" value="True" />
         <Data key="minus_accuracy" value="0" />
@@ -523,13 +523,13 @@
         <Data key="desired_freq" value="0" />
         <Data key="desired_unit" value="0" />
         <Data key="divider" value="0" />
-        <Data key="domain" value="DIGITAL" />
+        <Data key="domain" value="0" />
         <Data key="enabled" value="True" />
         <Data key="ilo_1k_enabled" value="True" />
         <Data key="ilo_33k_enabled" value="False" />
-        <Data key="ilo_100k_enabled" value="False" />
-        <Data key="ilo_oscillator" value="ILO_1kHz" />
-        <Data key="minus_accuracy" value="50" />
+        <Data key="ilo_100k_enabled" value="True" />
+        <Data key="ilo_oscillator" value="ILO_100kHz" />
+        <Data key="minus_accuracy" value="55" />
         <Data key="minus_tolerance" value="0" />
         <Data key="name" value="ILO" />
         <Data key="netlist_name" value="ILO" />
@@ -605,14 +605,14 @@
   <Data key="DataVersionKey" value="2" />
   <Group key="DWRInstGuidMapping">
     <Group key="Clock">
-      <Data key="2c366327-8ea9-4813-ab0d-a7ce473af76e/ccbbccde-4db5-4009-af85-8e8bae589faa" value="CAN_1_Clock" />
+      <Data key="2c366327-8ea9-4813-ab0d-a7ce473af76e/ccbbccde-4db5-4009-af85-8e8bae589faa" value="CAN_Clock" />
       <Data key="9f64ba59-a535-4184-b23e-39e7b95963a3" value="Clock_1" />
       <Data key="36f1a062-beab-44f5-8a92-930987a4fbc8" value="Clock_MIDI" />
       <Data key="42ccd0e5-2b28-4b26-b2aa-60e6be5395d0/2b3078c1-9a14-4aea-bb80-3826ca4e0c90" value="DVDAC_Modulation_IntClock" />
       <Data key="42ccd0e5-2b28-4b26-b2aa-60e6be5395d0/16079296-677d-4c97-a0f1-fd79fcfb8c33" value="DVDAC_Modulation_BUS_CLK" />
       <Data key="73cc6f7b-a06e-43a2-a303-f1357247fea9" value="Clock_PWM" />
-      <Data key="652b44e2-bfa5-48fd-82c6-2a0b9727be30/5b34848d-bc4e-4754-bf65-dcda7ecc1385" value="LED_Driver_1_ClkInternal" />
-      <Data key="652b44e2-bfa5-48fd-82c6-2a0b9727be30/16079296-677d-4c97-a0f1-fd79fcfb8c33" value="LED_Driver_1_BUS_CLK" />
+      <Data key="652b44e2-bfa5-48fd-82c6-2a0b9727be30/5b34848d-bc4e-4754-bf65-dcda7ecc1385" value="LED_Driver_ClkInternal" />
+      <Data key="652b44e2-bfa5-48fd-82c6-2a0b9727be30/16079296-677d-4c97-a0f1-fd79fcfb8c33" value="LED_Driver_BUS_CLK" />
       <Data key="07868ca4-5507-47a9-a8c4-a8707f99ac0b" value="Clock_2" />
       <Data key="63768c62-0588-422a-9895-936685a8d10b/2b3078c1-9a14-4aea-bb80-3826ca4e0c90" value="DVDAC_Velocity_2_IntClock" />
       <Data key="63768c62-0588-422a-9895-936685a8d10b/16079296-677d-4c97-a0f1-fd79fcfb8c33" value="DVDAC_Velocity_2_BUS_CLK" />

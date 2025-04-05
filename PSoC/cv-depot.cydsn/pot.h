@@ -54,6 +54,7 @@ typedef struct pot {
     uint8_t current;
     uint8_t target;
     uint8_t phase;
+    uint32_t last_checkpoint;
     enum PotId pot_id;
 } pot_t;
 
@@ -69,7 +70,7 @@ extern pot_t pot_portament_2;
  * The method resets the command output, unselects all pot devices
  * and creates pot objects.
  */
-extern void PotInit();
+extern void PotGlobalInit();
 
 /**
  * Clear a pot object.
@@ -81,7 +82,7 @@ extern void PotInit();
  * @param pot: pot_t - The pot object to initialize
  * @param select: void (*)(uint8) - Function to select pot (1:disable, 0:enable)
  */
-extern void PotStart(pot_t *pot, enum PotId pot_id);
+extern void PotInit(pot_t *pot, enum PotId pot_id);
 
 /**
  * Change target wiper position.
@@ -89,7 +90,7 @@ extern void PotStart(pot_t *pot, enum PotId pot_id);
  * @param pot: pot_t - The pot object to modify
  * @param target: uint8_t - Target position. 0 <= target < 0x40
  */
-extern void PotChangeTargetPosition(pot_t *pot, uint8_t target);
+extern void PotChangeTargetPosition(pot_t *pot, int8_t target);
 
 /**
  * Updates the corresponding pot based on the pot object.
