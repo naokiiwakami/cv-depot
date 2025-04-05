@@ -377,7 +377,7 @@ void Calibrate()
     uint8_t delta = reading ? 1 : -1;
     uint8_t prev_reading;
     do {
-        PotChangeTargetPosition(&pot_note_1, pot_note_1.current + delta);
+        PotSetTargetPosition(&pot_note_1, pot_note_1.current + delta);
         while (!PotUpdate(&pot_note_1)) {
             CyDelay(1);
         }
@@ -402,7 +402,7 @@ void Calibrate()
     LED_Driver_Write7SegNumberDec(pot_note_2.current, 0, 3, LED_Driver_RIGHT_ALIGN);
     delta = reading ? -1 : 1;
     do {
-        PotChangeTargetPosition(&pot_note_2, pot_note_2.current + delta);
+        PotSetTargetPosition(&pot_note_2, pot_note_2.current + delta);
         while (!PotUpdate(&pot_note_1)) {
             CyDelay(1);
         }
@@ -446,10 +446,16 @@ void Diagnose() {
 
 typedef struct pot_queue_item {
     uint8_t initial;
-    int8_t current;  // set -1 to keep current
-    int8_t target;
+    int8_t target;  // set -1 to ensure to move to the terminal B
     pot_t *pot;
 } pot_queue_item_t;
+
+static void InitPotQueueItem(pot_queue_item_t *item, pot_t *pot, int8_t target)
+{
+    item->initial = 1;
+    item->pot = pot;
+    item->target = target;
+}
 
 int main(void)
 {
@@ -466,27 +472,16 @@ int main(void)
     EEPROM_Start();
     InitMidiParameters();
     PotGlobalInit();
-    pot_queue_item_t *item;
-    item = &pending_pot_changes[pending_pot_tail++];
-    item->initial = 1;
-    item->current = 63;
-    item->target = 0;
-    item->pot = &pot_portament_1;
-    item = &pending_pot_changes[pending_pot_tail++];
-    item->initial = 1;
-    item->current = 63;
-    item->target = 0;
-    item->pot = &pot_portament_2;
-    item = &pending_pot_changes[pending_pot_tail++];
-    item->initial = 1;
-    item->current = 63;
-    item->target = 0;
-    item->pot = &pot_note_1;
-    item = &pending_pot_changes[pending_pot_tail++];
-    item->initial = 1;
-    item->current = -1;
-    item->target = 34;
-    item->pot = &pot_note_1;
+    
+    // Set pot positions. The pots are not power-cycled on soft reset, so we'll lose
+    // track of actual wiper position. We then force wipers move to terminal B first.
+    InitPotQueueItem(&pending_pot_changes[pending_pot_tail++], &pot_portament_1, -1);
+    InitPotQueueItem(&pending_pot_changes[pending_pot_tail++], &pot_portament_2, -1);
+    InitPotQueueItem(&pending_pot_changes[pending_pot_tail++], &pot_note_1, -1);
+    InitPotQueueItem(&pending_pot_changes[pending_pot_tail++], &pot_note_1, 34);
+    InitPotQueueItem(&pending_pot_changes[pending_pot_tail++], &pot_note_2, -1);
+    InitPotQueueItem(&pending_pot_changes[pending_pot_tail++], &pot_note_2, 32);
+    
     UART_Midi_Start();
     LED_Driver_Start();
     LED_Driver_SetBrightness(LED_Driver_BRIGHTNESS, 0);
@@ -553,10 +548,11 @@ int main(void)
             pot_queue_item_t *item = &pending_pot_changes[pending_pot_head];
             pot_t *pot = item->pot;
             if (item->initial) {
-                if (item->current >= 0) {
-                    pot->current = item->current;
+                if (item->target < 0) {
+                    PotEnsureToMoveToB(pot);
+                } else {
+                    PotSetTargetPosition(pot, item->target);
                 }
-                pot->target = item->target;
                 item->initial = 0;
             }
             if (PotUpdate(pot)) {

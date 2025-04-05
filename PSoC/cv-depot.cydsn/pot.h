@@ -12,6 +12,7 @@
 
 /*
  * This component drives multiple MCP4011 digital pots.
+ *
  * See
  * https://ww1.microchip.com/downloads/aemDocuments/documents/OTH/ProductDocuments/DataSheets/20001978D.pdf
  * for the chip behavior.
@@ -90,7 +91,14 @@ extern void PotInit(pot_t *pot, enum PotId pot_id);
  * @param pot: pot_t - The pot object to modify
  * @param target: uint8_t - Target position. 0 <= target < 0x40
  */
-extern void PotChangeTargetPosition(pot_t *pot, int8_t target);
+extern void PotSetTargetPosition(pot_t *pot, int8_t target);
+
+/**
+ * Request to move the wiper position to the terminal B.
+ *
+ * It is done by moving the wiper downwards 63 times.
+ */
+extern void PotEnsureToMoveToB(pot_t *pot);
 
 /**
  * Updates the corresponding pot based on the pot object.

@@ -67,7 +67,7 @@ void PotInit(pot_t *pot, enum PotId pot_id)
     pot->last_checkpoint = 0;
 }
 
-void PotChangeTargetPosition(pot_t *pot, int8_t target)
+void PotSetTargetPosition(pot_t *pot, int8_t target)
 {
     if (target >= 0x40) {
         target = 0x3f;
@@ -76,6 +76,12 @@ void PotChangeTargetPosition(pot_t *pot, int8_t target)
         target = 0;
     }   
     pot->target = target;
+}
+
+void PotEnsureToMoveToB(pot_t *pot)
+{
+    pot->current = 63;
+    pot->target = 0;
 }
 
 uint8_t PotUpdate(pot_t *pot)
