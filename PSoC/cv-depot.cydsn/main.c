@@ -13,6 +13,7 @@
 
 #include "eeprom_addr.h"
 #include "pot.h"
+#include "pot_change.h"
 
 // Interrupt handler declarations
 CY_ISR_PROTO(SwitchHandler);
@@ -342,30 +343,33 @@ void Calibrate()
     Pin_Encoder_LED_2_Write(1);
     
     // set the lowest note
-    PWM_Notes_WriteCompare1(0);
-    PWM_Notes_WriteCompare2(0);
+    PWM_Notes_WriteCompare1(12);
+    PWM_Notes_WriteCompare2(12);
     
     // set the bend center position
-    PWM_Bend_WriteCompare(bend_offset);
+    uint16_t offset = bend_offset - 6000;
+    PWM_Bend_WriteCompare(offset);
     
-    QuadDec_SetCounter(bend_offset);
+    QuadDec_SetCounter(offset);
     
     // We defer any other requests until the calibration ends. So we loop locally here
     while (mode == MODE_CALIBRATION) {
         int16_t counter_value = QuadDec_GetCounter();
-        if (counter_value != bend_offset) {
-            bend_offset = counter_value;
-            PWM_Bend_WriteCompare(bend_offset);
+        if (counter_value != offset) {
+            offset = counter_value;
+            PWM_Bend_WriteCompare(offset);
         }
     }
     
     // save the offset to EEPROM, in big endian manner
+    /*
     EEPROM_WriteByte(0xd1, ADDR_BEND_OFFSET);  // indicates data is available
     EEPROM_WriteByte((bend_offset >> 8) & 0xff, ADDR_BEND_OFFSET + 1);
     EEPROM_WriteByte(bend_offset & 0xff, ADDR_BEND_OFFSET + 2);
+    */
     
-    PWM_Notes_WriteCompare1(36);
-    PWM_Notes_WriteCompare2(36);
+    PWM_Notes_WriteCompare1(48);
+    PWM_Notes_WriteCompare2(48);
     
     Pin_Adj_S0_Write(0);
     Pin_Adj_En_Write(1);
@@ -444,28 +448,8 @@ void Diagnose() {
     mode = MODE_NORMAL;
 }
 
-typedef struct pot_change_request {
-    uint8_t requested;
-    int8_t target;  // set -1 to ensure to move to the terminal B
-    pot_t *pot;
-} pot_change_request_t;
-
-static void InitPotChangeRequest(pot_change_request_t *item, pot_t *pot, int8_t target)
-{
-    item->requested = 0;
-    item->pot = pot;
-    item->target = target;
-}
-
 int main(void)
 {
-    // Queue of pot objects pending for updates.
-    uint8_t request_head = 0;
-    uint8_t request_tail = 0;
-    uint8_t pot_queue_overflow = 0;
-    const int kPotsQueueSize = 8;
-    pot_change_request_t pot_change_requests[kPotsQueueSize];
-    
     CyGlobalIntEnable; /* Enable global interrupts. */
 
     // Initialization ////////////////////////////////////
@@ -475,12 +459,12 @@ int main(void)
     
     // Set pot positions. The pots are not power-cycled on soft reset, so we'll lose
     // track of actual wiper positions. We then force wipers move to terminal B first.
-    InitPotChangeRequest(&pot_change_requests[request_tail++], &pot_portament_1, -1);
-    InitPotChangeRequest(&pot_change_requests[request_tail++], &pot_portament_2, -1);
-    InitPotChangeRequest(&pot_change_requests[request_tail++], &pot_note_1, -1);
-    InitPotChangeRequest(&pot_change_requests[request_tail++], &pot_note_1, 34);
-    InitPotChangeRequest(&pot_change_requests[request_tail++], &pot_note_2, -1);
-    InitPotChangeRequest(&pot_change_requests[request_tail++], &pot_note_2, 32);
+    PotChangePlaceRequest(&pot_portament_1, -1);
+    PotChangePlaceRequest(&pot_portament_2, -1);
+    PotChangePlaceRequest(&pot_note_1, -1);
+    PotChangePlaceRequest(&pot_note_1, 35);
+    PotChangePlaceRequest(&pot_note_2, -1);
+    PotChangePlaceRequest(&pot_note_2, 32);
     
     UART_Midi_Start();
     LED_Driver_Start();
@@ -544,22 +528,7 @@ int main(void)
         // Pin_LED_Write(Pin_Pot_UD_Read());
         
         // Consume pot change requests if not empty
-        if (request_head != request_tail || pot_queue_overflow) {
-            pot_change_request_t *item = &pot_change_requests[request_head];
-            pot_t *pot = item->pot;
-            if (!item->requested) {
-                if (item->target < 0) {
-                    PotEnsureToMoveToB(pot);
-                } else {
-                    PotSetTargetPosition(pot, item->target);
-                }
-                item->requested = 0;
-            }
-            if (PotUpdate(pot)) {
-                request_head = (request_head + 1) % kPotsQueueSize;
-                pot_queue_overflow = 0;
-            }
-        }
+        PotChangeHandleRequests();
     }
 }
 

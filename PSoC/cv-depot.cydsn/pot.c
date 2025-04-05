@@ -21,12 +21,6 @@ pot_t pot_portament_2;
 
 void PotGlobalInit()
 {
-    CySysTickInit();
-    CySysTickDisableInterrupt();
-    CySysTickSetReload(0xffffff); // maximum
-    CySysTickSetClockSource(CY_SYS_SYST_CSR_CLK_SRC_LFCLK); // 100 kHz
-    CySysTickClear();
-    
     Pin_Pot_UD_Write(0);
     PotInit(&pot_note_1, POT_NOTE_1);
     PotInit(&pot_note_2, POT_NOTE_2);
@@ -64,7 +58,6 @@ void PotInit(pot_t *pot, enum PotId pot_id)
     SelectDevice(pot_id, 1);
     
     pot->phase = PHASE_IDLE;
-    pot->last_checkpoint = 0;
 }
 
 void PotSetTargetPosition(pot_t *pot, int8_t target)
@@ -89,47 +82,28 @@ uint8_t PotUpdate(pot_t *pot)
     if (pot->current == pot->target) {
         SelectDevice(pot->pot_id, 1);
         pot->phase = PHASE_IDLE;
-        CySysTickStop();
         return 1;
     }
-    if (pot->phase == PHASE_IDLE) {
-        CySysTickClear();
-        CySysTickEnable();
-        Pin_Pot_UD_Write(pot->target > pot->current ? 1 : 0);
-        pot->phase = PHASE_DIRECTION_SET;
-        pot->last_checkpoint = CySysTickGetValue();
-        return 0;
-    }
-    if (CySysTickGetValue() >= pot->last_checkpoint - 1) {
-        return 0;
-    }
     switch (pot->phase) {
+    case PHASE_IDLE:
+        pot->level = pot->target > pot->current ? 1 : 0;
+        Pin_Pot_UD_Write(pot->level);
+        pot->phase = PHASE_DIRECTION_SET;
+        return 0;
     case PHASE_DIRECTION_SET:
         SelectDevice(pot->pot_id, 0);
-        pot->phase = PHASE_CHIP_SELECTED;
-        pot->last_checkpoint = CySysTickGetValue();        
+        pot->phase = PHASE_TO_LOAD;
         return 0;
-    case PHASE_CHIP_SELECTED:
-        /*
-        if (Pin_Pot_UD_Read()) {
-            // don't change the phase, just drop the level
-            Pin_Pot_UD_Write(0);
-            return 0;
-        }
-        */
-        Pin_Pot_UD_Write(!Pin_Pot_UD_Read());
-        pot->last_checkpoint = CySysTickGetValue();        
-        pot->phase = PHASE_READY;
+    case PHASE_TO_LOAD:
+        pot->level ^= 1;
+        Pin_Pot_UD_Write(pot->level);
+        pot->phase = PHASE_TO_TRIGGER;
         return 0;
-    case PHASE_READY:
-        if (!Pin_Pot_UD_Read()) {
-            Pin_Pot_UD_Write(1);
-            pot->current += pot->target > pot->current ? 1 : 0;
-        } else {
-            Pin_Pot_UD_Write(0);
-            pot->current += pot->target > pot->current ? 0 : -1;
-        }
-        pot->last_checkpoint = CySysTickGetValue();        
+    case PHASE_TO_TRIGGER:
+        pot->level ^= 1;
+        Pin_Pot_UD_Write(pot->level);
+        pot->current += pot->target > pot->current ? 1 : -1;
+        pot->phase = PHASE_TO_LOAD;
         return 0;
     }
     return 1;

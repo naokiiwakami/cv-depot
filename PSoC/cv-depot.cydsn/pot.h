@@ -35,7 +35,7 @@
 #define POT_H
     
 #include "project.h"
-    
+
 enum PotId {
     POT_NOTE_1,
     POT_NOTE_2,
@@ -45,17 +45,17 @@ enum PotId {
 
 // pot control phases
 enum PotCommandPhase {
-    PHASE_IDLE = 0,
-    PHASE_DIRECTION_SET = 1,
-    PHASE_CHIP_SELECTED = 2,
-    PHASE_READY = 3,
+    PHASE_IDLE,
+    PHASE_DIRECTION_SET,
+    PHASE_TO_LOAD,
+    PHASE_TO_TRIGGER,
 };
 
 typedef struct pot {
     uint8_t current;
     uint8_t target;
     uint8_t phase;
-    uint32_t last_checkpoint;
+    uint8_t level;
     enum PotId pot_id;
 } pot_t;
 
