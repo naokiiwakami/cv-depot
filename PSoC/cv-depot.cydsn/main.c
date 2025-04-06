@@ -11,7 +11,8 @@
 */
 #include "project.h"
 
-#include "eeprom_addr.h"
+#include "eeprom.h"
+#include "main.h"
 #include "pot.h"
 #include "pot_change.h"
 
@@ -21,19 +22,7 @@ CY_ISR_PROTO(SwitchHandler);
 // Misc setup parameters
 #define LED_Driver_BRIGHTNESS 70
 
-// Firmware runtime modes
-enum ProgramMode {
-    MODE_NORMAL = 0,
-    MODE_MENU_SELECTING,
-    MODE_MENU_SELECTED,
-    MODE_MIDI_CHANNEL_SETUP,
-    MODE_MIDI_CHANNEL_CONFIRMED,
-    MODE_CALIBRATION_INIT,
-    MODE_CALIBRATION_BEND_WIDTH,
-    MODE_CALIBRATION_BEND_CONFIRMED,
-};
-
-static volatile uint8_t mode = MODE_NORMAL;
+volatile uint8_t mode = MODE_NORMAL;
 
 typedef struct menu {
     const char *name;
@@ -41,7 +30,7 @@ typedef struct menu {
 } menu_t;
 
 static void SetMidiChannel();
-static void Calibrate();
+// static void Calibrate();
 static void Diagnose();
 
 static int8_t menu_item = -1;
@@ -120,15 +109,15 @@ static uint8_t midi_data_length;    // Expected MIDI data length
 // Voice controller
 static uint8_t  voice_CurrentNote;
 static uint8_t  voices_NotesCount;
-static uint8_t  voices_Notes[MAX_NOTE_COUNT];
+// static uint8_t  voices_Notes[MAX_NOTE_COUNT];
 
 // other controller values
 // Note that these values are not always equivalent to actual
 // CV values since we apply anti-click mechanism to the CV values in
 // transition to make the pitch change smooth.
-static int16_t ctrl_PitchBend;
+// static int16_t ctrl_PitchBend;
 static uint8_t ctrl_PitchBend_updating;
-static uint16_t bend_offset;
+uint16_t bend_offset;
 
 #define VELOCITY_DAC_VALUE(velocity) (((velocity) * (velocity)) >> 3)
 #define INDICATOR_VALUE(velocity) ((velocity) >= 64 ? ((velocity) - 64) * 2 + 1 : 0)
@@ -338,6 +327,7 @@ void SetMidiChannel()
     QuadDec_SetCounter(encoder_value + 16384);
 }
 
+#if 0
 /**
  * Find bend width for a octave (i.e., 1V) manually.
  *
@@ -533,6 +523,7 @@ void Calibrate()
     
     Pin_Encoder_LED_1_Write(0);
 }
+#endif
 
 void Diagnose() {
     Pin_Gate_1_Write(1);
