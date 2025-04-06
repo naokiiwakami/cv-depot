@@ -20,6 +20,8 @@
 #define ADDR_MIDI_CH 0
 #define ADDR_BEND_OFFSET 1
 #define ADDR_BEND_OCTAVE_WIDTH 4
+#define ADDR_NOTE_1_WIPER 6
+#define ADDR_NOTE_2_WIPER 7
 
 extern cystatus Save16(uint16_t data, uint16_t address);
 extern uint16_t Load16(uint16_t address);

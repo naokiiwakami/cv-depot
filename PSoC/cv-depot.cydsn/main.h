@@ -27,10 +27,13 @@ enum ProgramMode {
     MODE_CALIBRATION_BEND_CONFIRMED,
 };
 
+enum Voice {
+    VOICE_1,
+    VOICE_2,
+};
+
 extern volatile uint8_t mode;
-
 extern uint16_t bend_offset;
-
 extern void Calibrate();
 
 #endif  // MAIN_H
