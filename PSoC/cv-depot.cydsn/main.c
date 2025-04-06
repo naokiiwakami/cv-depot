@@ -388,20 +388,22 @@ static uint16_t FindBendOctaveWidth()
     return bend - bend_offset;
 }
 
+#define MEASUREMENT_WAIT_MS 256
+#define WAIT(x) CyDelay(MEASUREMENT_WAIT_MS)
+
 uint16_t BendToReference(int16_t initial_bend)
 {
     uint16_t bend_lower = 0;
     uint16_t bend_upper = 32768;
     uint16_t bend = initial_bend >= 0 ? initial_bend : (bend_lower + bend_upper) / 2;
     PWM_Bend_WriteCompare(bend);
-
-    CyDelay(250);
+    WAIT();
     uint8_t reading = Pin_Adjustment_In_Read();
     Pin_LED_Write(reading);
     do {
         bend = (bend_lower + bend_upper) / 2;
         PWM_Bend_WriteCompare(bend);
-        CyDelay(250);
+        WAIT();
         reading = Pin_Adjustment_In_Read();
         Pin_LED_Write(reading);
         if (reading) {
@@ -462,7 +464,7 @@ void Calibrate()
         PWM_Bend_WriteCompare(bend_offset - bend_octave_width);  
         PWM_Notes_WriteCompare1(48);
         PWM_Notes_WriteCompare2(48);
-        CyDelay(250);
+        WAIT();
         reading = Pin_Adjustment_In_Read();
         Pin_LED_Write(reading);
         if (reading) {
