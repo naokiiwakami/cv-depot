@@ -15,6 +15,7 @@
     
 #define ADDR_MIDI_CH 0
 #define ADDR_BEND_OFFSET 1
+#define ADDR_BEND_OCTAVE_WIDTH 4
     
 #endif  // EEPROM_ADDR_H
 
