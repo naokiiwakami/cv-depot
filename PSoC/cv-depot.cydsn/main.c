@@ -388,6 +388,31 @@ static uint16_t FindBendOctaveWidth()
     return bend - bend_offset;
 }
 
+uint16_t BendToReference(int16_t initial_bend)
+{
+    uint16_t bend_lower = 0;
+    uint16_t bend_upper = 32768;
+    uint16_t bend = initial_bend >= 0 ? initial_bend : (bend_lower + bend_upper) / 2;
+    PWM_Bend_WriteCompare(bend);
+
+    CyDelay(250);
+    uint8_t reading = Pin_Adjustment_In_Read();
+    Pin_LED_Write(reading);
+    do {
+        bend = (bend_lower + bend_upper) / 2;
+        PWM_Bend_WriteCompare(bend);
+        CyDelay(250);
+        reading = Pin_Adjustment_In_Read();
+        Pin_LED_Write(reading);
+        if (reading) {
+            bend_lower = bend;
+        } else {
+            bend_upper = bend;
+        }
+    } while (bend_upper - bend_lower > 1);
+    return bend;
+}
+
 void Calibrate()
 {
     Pin_Portament_En_Write(0);
@@ -415,44 +440,29 @@ void Calibrate()
     
     LED_Driver_WriteString7Seg("a", 0);
     
-    PWM_Notes_WriteCompare1(36);
-    PWM_Notes_WriteCompare2(36);
-    
     Pin_Adj_S0_Write(0);
     Pin_Adj_En_Write(1);
     
     // LED_Driver_Write7SegNumberDec(pot_note_1.current, 0, 3, LED_Driver_RIGHT_ALIGN);
     uint8_t wiper_lowest = 0;
     uint8_t wiper_highest = 63;
-    uint8_t wiper = pot_note_1.current;
+    uint8_t wiper;
+    uint8_t reading;
     do {
+        wiper = (wiper_lowest + wiper_highest) / 2;
         LED_Driver_Write7SegNumberDec(wiper, 1, 2, LED_Driver_RIGHT_ALIGN);
+        PotSetTargetPosition(&pot_note_1, wiper);
+        while (!PotUpdate(&pot_note_1)) {}
         
-        uint16_t bend_lower = 0;
-        uint16_t bend_upper = 32768;
-        bend_offset = (bend_lower + bend_upper) / 2;
-        PWM_Bend_WriteCompare(bend_offset);
-   
-        CyDelay(50);
-        uint8_t reading = Pin_Adjustment_In_Read();
-        Pin_LED_Write(reading);
-        do {
-            if (reading) {
-                bend_lower = bend_offset;
-            } else {
-                bend_upper = bend_offset;
-            }
-            bend_offset = (bend_lower + bend_upper) / 2;
-            PWM_Bend_WriteCompare(bend_offset);
-            CyDelay(50);
-            reading = Pin_Adjustment_In_Read();
-            Pin_LED_Write(reading);
-        } while (bend_upper - bend_lower > 1);
+        PWM_Notes_WriteCompare1(36);
+        PWM_Notes_WriteCompare2(36);
+        
+        bend_offset = BendToReference(-1);
         
         PWM_Bend_WriteCompare(bend_offset - bend_octave_width);  
         PWM_Notes_WriteCompare1(48);
         PWM_Notes_WriteCompare2(48);
-        CyDelay(50);
+        CyDelay(250);
         reading = Pin_Adjustment_In_Read();
         Pin_LED_Write(reading);
         if (reading) {
@@ -460,15 +470,41 @@ void Calibrate()
         } else {
             wiper_highest = wiper;
         }
-        wiper = (wiper_lowest + wiper_highest) / 2;
-        PotSetTargetPosition(&pot_note_1, wiper);
-        while (!PotUpdate(&pot_note_1)) {
-            // CyDelay(1);
-        }
     } while (wiper_highest - wiper_lowest > 1);
-
     
+    Pin_Encoder_LED_1_Write(1);
+    
+    uint16_t adjusted_bend = BendToReference(-1);
+    int16_t error1 = adjusted_bend - bend_offset + bend_octave_width;
+    
+    uint16_t another_wiper = wiper == wiper_highest ? wiper_lowest : wiper_highest;
+    
+        LED_Driver_Write7SegNumberDec(another_wiper, 1, 2, LED_Driver_RIGHT_ALIGN);
+        PotSetTargetPosition(&pot_note_1, another_wiper);
+        while (!PotUpdate(&pot_note_1)) {}
+        
+        PWM_Notes_WriteCompare1(36);
+        PWM_Notes_WriteCompare2(36);
+        
+        bend_offset = BendToReference(-1);
+        
+        PWM_Bend_WriteCompare(bend_offset - bend_octave_width);  
+        PWM_Notes_WriteCompare1(48);
+        PWM_Notes_WriteCompare2(48);
+
+        adjusted_bend = BendToReference(-1);
+        int16_t error2 = adjusted_bend - bend_offset + bend_octave_width;
+        
+    if (error1 * error1 < error2 * error2) {
+        LED_Driver_Write7SegNumberDec(wiper, 1, 2, LED_Driver_RIGHT_ALIGN);
+        PotSetTargetPosition(&pot_note_1, wiper);       
+    }
+    
+    PWM_Bend_WriteCompare(bend_offset);
+    
+    Pin_Encoder_LED_1_Write(0);
     Pin_Encoder_LED_2_Write(0);
+
     /*
     
     Pin_Adj_S0_Write(1);
@@ -537,7 +573,7 @@ int main(void)
     PotChangePlaceRequest(&pot_portament_1, -1);
     PotChangePlaceRequest(&pot_portament_2, -1);
     PotChangePlaceRequest(&pot_note_1, -1);
-    PotChangePlaceRequest(&pot_note_1, 35);
+    PotChangePlaceRequest(&pot_note_1, 33);
     PotChangePlaceRequest(&pot_note_2, -1);
     PotChangePlaceRequest(&pot_note_2, 32);
     
