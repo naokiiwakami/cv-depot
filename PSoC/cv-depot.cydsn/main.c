@@ -120,18 +120,23 @@ static uint8_t ctrl_PitchBend_updating;
 uint16_t bend_offset;
 
 #define VELOCITY_DAC_VALUE(velocity) (((velocity) * (velocity)) >> 3)
-#define INDICATOR_VALUE(velocity) ((velocity) >= 64 ? ((velocity) - 64) * 2 + 1 : 0)
+#define INDICATOR_VALUE(velocity) ((velocity) >= 64 ? (((velocity) - 63)  * ((velocity) - 63)) / 32 - 1 : 0)
 #define NOTE_PWM_MAX_VALUE 120
 
 static void Gate1On(uint8_t velocity)
 {
-    DVDAC_Velocity_1_SetValue(VELOCITY_DAC_VALUE(velocity));
-    PWM_Indicators_WriteCompare1(INDICATOR_VALUE(velocity));
-    Pin_Gate_1_Write(1);
+    if (Pin_Gate_1_Read()) {
+        Pin_Portament_En_Write(1);
+    } else {
+        DVDAC_Velocity_1_SetValue(VELOCITY_DAC_VALUE(velocity));
+        PWM_Indicators_WriteCompare1(INDICATOR_VALUE(velocity));
+        Pin_Gate_1_Write(1);
+    }
 }
 
 static void Gate1Off()
 {
+    Pin_Portament_En_Write(0);
     DVDAC_Velocity_1_SetValue(0);
     Pin_Gate_1_Write(0);
 }
@@ -154,7 +159,7 @@ static void NoteOff(uint8_t note_number)
     LED_Driver_PutChar7Seg('F', 0);
     LED_Driver_Write7SegNumberHex(note_number, 1, 2, LED_Driver_RIGHT_ALIGN);
     Gate1Off();
-    Gate2Off();
+    // Gate2Off();
 }
 
 static void NoteOn(uint8_t note_number, uint8_t velocity)
@@ -173,7 +178,7 @@ static void NoteOn(uint8_t note_number, uint8_t velocity)
     PWM_Notes_WriteCompare1(note_number);
     PWM_Notes_WriteCompare2(note_number);
     Gate1On(velocity);
-    Gate2On(velocity);
+    // Gate2On(velocity);
 }
 
 static void ControlChange(uint8_t control_number, uint8_t value)
@@ -194,9 +199,6 @@ static void InitMidiParameters()
     // Bend
     // ctrl_PitchBend = 8192 >> 4; // 0x20 0x00
     ctrl_PitchBend_updating = 0;
-    
-    // Portament
-    Pin_Portament_En_Write(0);
 }
 
 static void InitMidiControllers()
@@ -224,10 +226,10 @@ static void InitMidiControllers()
         temp = EEPROM_ReadByte(ADDR_BEND_OFFSET + 2);
         bend_offset += temp;
     } else { // initial value
-        bend_offset = 16384;
+        bend_offset = BEND_STEPS / 2;
     }
     */
-    bend_offset = 16384;
+    bend_offset = BEND_STEPS / 2;
     
     // Gates
     Gate1Off();
@@ -240,6 +242,9 @@ static void InitMidiControllers()
     Pin_Portament_En_Write(0);
     PotChangePlaceRequest(&pot_portament_1, -1);  // move to terminal B
     PotChangePlaceRequest(&pot_portament_2, -1);  // move to terminal B
+    PotChangePlaceRequest(&pot_portament_1, 2);
+    PotChangePlaceRequest(&pot_portament_2, 2);
+    Pin_Portament_En_Write(0);
 }
 
 void HandleMidiChannelMessage()

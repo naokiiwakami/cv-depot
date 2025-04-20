@@ -31,7 +31,7 @@ static uint16_t FindBendOctaveWidth()
     QuadDec_SetCounter(0);    
     int16_t counter_last_value = 0;
     uint16_t bend_lower = bend_offset;  // we know the target is 1V higher than the starting point.
-    uint16_t bend_upper = 32768;
+    uint16_t bend_upper = BEND_STEPS;
 
     int16_t bend = bend_offset;
     bend += Load16(ADDR_BEND_OCTAVE_WIDTH);;
@@ -69,7 +69,7 @@ static uint16_t FindBendOctaveWidth()
 uint16_t BendToReference(int16_t initial_bend)
 {
     uint16_t bend_lower = 0;
-    uint16_t bend_upper = 32768;
+    uint16_t bend_upper = BEND_STEPS;
     uint16_t bend = initial_bend >= 0 ? initial_bend : (bend_lower + bend_upper) / 2;
     PWM_Bend_WriteCompare(bend);
     WAIT();
@@ -216,7 +216,7 @@ void Calibrate()
     CalibrateNoteCV(&config_2, bend_octave_width);
 
     // wrap up
-    bend_offset = 16384;
+    bend_offset = BEND_STEPS / 2;
     PWM_Bend_WriteCompare(bend_offset);
     Pin_Adj_En_Write(0);
     Pin_Encoder_LED_1_Write(0);

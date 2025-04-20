@@ -32,6 +32,8 @@ enum Voice {
     VOICE_2,
 };
 
+#define BEND_STEPS 1024
+
 extern volatile uint8_t mode;
 extern uint16_t bend_offset;
 extern void Calibrate();
