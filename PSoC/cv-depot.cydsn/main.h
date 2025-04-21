@@ -10,8 +10,7 @@
  * ========================================
 */
 
-#ifndef MAIN_H
-#define MAIN_H
+#pragma once
 
 #include "stdint.h"
 
@@ -38,5 +37,4 @@ extern volatile uint8_t mode;
 extern uint16_t bend_offset;
 extern void Calibrate();
 
-#endif  // MAIN_H
 /* [] END OF FILE */

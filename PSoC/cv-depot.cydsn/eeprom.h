@@ -10,8 +10,7 @@
  * ========================================
 */
 
-#ifndef EEPROM_ADDR_H
-#define EEPROM_ADDR_H
+#pragma once
 
 #include "project.h"
 
@@ -26,6 +25,4 @@
 extern cystatus Save16(uint16_t data, uint16_t address);
 extern uint16_t Load16(uint16_t address);
     
-#endif  // EEPROM_ADDR_H
-
 /* [] END OF FILE */

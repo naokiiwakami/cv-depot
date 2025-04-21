@@ -12,7 +12,9 @@
 #include "project.h"
 
 #include "eeprom.h"
+#include "key_assigner.h"
 #include "main.h"
+#include "midi.h"
 #include "pot.h"
 #include "pot_change.h"
 
@@ -42,6 +44,7 @@ static menu_t menus[] = {
     { NULL, NULL },
 };
 
+#if 0
 /*---------------------------------------------------------*/
 /* MIDI decoder                                            */
 /*---------------------------------------------------------*/
@@ -95,8 +98,6 @@ static uint8_t midi_status;      // MIDI status
 static uint8_t midi_message;     // MIDI message (= status & 0xF0)
 static uint8_t midi_channel;     // MIDI channel (= status & 0x0F)
 
-static uint8_t basic_midi_channel; // The decoder picks up only this channel
-
 static uint8_t midi_data[2];        // MIDI data buffer
 static uint8_t midi_data_position;  // MIDI data buffer pointer
 static uint8_t midi_data_length;    // Expected MIDI data length
@@ -105,6 +106,9 @@ static uint8_t midi_data_length;    // Expected MIDI data length
 /* Controllers                                             */
 /*---------------------------------------------------------*/
 #define MAX_NOTE_COUNT 8
+#endif
+
+static uint8_t basic_midi_channel; // The decoder picks up only this channel
 
 // Voice controller
 static uint8_t  voice_CurrentNote;
@@ -123,6 +127,7 @@ uint16_t bend_offset;
 #define INDICATOR_VALUE(velocity) ((velocity) >= 64 ? (((velocity) - 63)  * ((velocity) - 63)) / 32 - 1 : 0)
 #define NOTE_PWM_MAX_VALUE 120
 
+#if 0
 static void Gate1On(uint8_t velocity)
 {
     if (Pin_Gate_1_Read()) {
@@ -201,6 +206,8 @@ static void InitMidiParameters()
     ctrl_PitchBend_updating = 0;
 }
 
+#endif
+
 static void InitMidiControllers()
 {
     // Basic MIDI channel
@@ -232,11 +239,11 @@ static void InitMidiControllers()
     bend_offset = BEND_STEPS / 2;
     
     // Gates
-    Gate1Off();
-    Gate2Off();
+    // Gate1Off();
+    // Gate2Off();
     
     // Bend
-    BendPitch(0x00, PITCH_BEND_CENTER);  // set neutral
+    // BendPitch(0x00, PITCH_BEND_CENTER);  // set neutral
 
     // Portament
     Pin_Portament_En_Write(0);
@@ -247,6 +254,7 @@ static void InitMidiControllers()
     Pin_Portament_En_Write(0);
 }
 
+#if 0
 void HandleMidiChannelMessage()
 {
     // do nothing for channels that are out of scope
@@ -337,6 +345,7 @@ static void ConsumeMidiByte(uint16_t rx_byte)
         }
     }
 }
+#endif
 
 void SetMidiChannel()
 {
@@ -379,7 +388,8 @@ int main(void)
 
     // Initialization ////////////////////////////////////
     EEPROM_Start();
-    InitMidiParameters();
+    InitializeMidiDecoder();
+    // InitMidiParameters();
     PotGlobalInit();
     
     UART_Midi_Start();

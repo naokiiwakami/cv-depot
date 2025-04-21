@@ -31,8 +31,7 @@
  * main loop.
  */
 
-#ifndef POT_H
-#define POT_H
+#pragma once
     
 #include "project.h"
 
@@ -114,6 +113,4 @@ extern void PotEnsureToMoveToB(pot_t *pot);
  */
 extern uint8_t PotUpdate(pot_t *pot);
 
-    
-#endif
 /* [] END OF FILE */

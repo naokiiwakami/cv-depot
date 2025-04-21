@@ -10,8 +10,7 @@
  * ========================================
 */
 
-#ifndef POT_CHANGE_H
-#define POT_CHANGE_H
+#pragma once
 
 #include "pot.h"
 
@@ -26,7 +25,5 @@
 extern uint8_t PotChangePlaceRequest(pot_t *pot, int8_t wiper_position);
 
 extern void PotChangeHandleRequests();
-
-#endif  // POT_CHANGE_H
 
 /* [] END OF FILE */
