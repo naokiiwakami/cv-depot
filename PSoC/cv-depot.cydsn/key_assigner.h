@@ -25,6 +25,7 @@ typedef struct voice {
     uint8_t velocity;
     uint8_t gate;
     uint8_t in_use[ALL_NOTES];
+    void (*set_note)(uint8_t note_number);
     void (*gate_on)(uint8_t velocity);
     void (*gate_off)();
 } voice_t;
@@ -36,6 +37,7 @@ typedef struct key_assigner {
 } key_assigner_t;
 
 extern void SetUpDuophonic();
+extern void SetUpUnison();
 extern void NoteOn(key_assigner_t *key_assigner, uint8_t note_number, uint8_t velocity);
 extern void NoteOff(key_assigner_t *key_assigner, uint8_t note_number);
 

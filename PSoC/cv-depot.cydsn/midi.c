@@ -94,6 +94,7 @@ void InitializeMidiDecoder()
         key_assigners[i] = NULL;
     }
     SetUpDuophonic(&key_assigner_instances[0]);
+    // SetUpUnison(&key_assigner_instances[0]);
     key_assigners[0] = &key_assigner_instances[0];
 }
 

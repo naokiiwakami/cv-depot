@@ -24,16 +24,14 @@ voice_t *duo_voices[2] = { &voices[0], &voices[1] };
 #define INDICATOR_VALUE(velocity) ((velocity) >= 64 ? (((velocity) - 63)  * ((velocity) - 63)) / 32 - 1 : 0)
 #define NOTE_PWM_MAX_VALUE 120
 
+#define SetNote1 PWM_Notes_WriteCompare1
+#define SetNote2 PWM_Notes_WriteCompare2
 
 static void Gate1On(uint8_t velocity)
 {
-    if (Pin_Gate_1_Read()) {
-        Pin_Portament_En_Write(1);
-    } else {
-        DVDAC_Velocity_1_SetValue(VELOCITY_DAC_VALUE(velocity));
-        PWM_Indicators_WriteCompare1(INDICATOR_VALUE(velocity));
-        Pin_Gate_1_Write(1);
-    }
+    DVDAC_Velocity_1_SetValue(VELOCITY_DAC_VALUE(velocity));
+    PWM_Indicators_WriteCompare1(INDICATOR_VALUE(velocity));
+    Pin_Gate_1_Write(1);
 }
 
 static void Gate1Off()
@@ -56,7 +54,25 @@ static void Gate2Off()
     Pin_Gate_2_Write(0);
 }
 
-void InitializeVoice(voice_t *voice, void (*gate_on)(uint8_t), void (*gate_off)())
+static void SetBothNotes(uint8_t note_number)
+{
+    SetNote1(note_number);
+    SetNote2(note_number);
+}
+
+static void BothGateOn(uint8_t velocity)
+{
+    Gate1On(velocity);
+    Gate2On(velocity);
+}
+
+static void BothGateOff()
+{
+    Gate1Off();
+    Gate2Off();
+}
+
+void InitializeVoice(voice_t *voice, void (*set_note)(uint8_t), void (*gate_on)(uint8_t), void (*gate_off)())
 {
     voice->num_notes = 0;
     voice->velocity = 0;
@@ -64,6 +80,7 @@ void InitializeVoice(voice_t *voice, void (*gate_on)(uint8_t), void (*gate_off)(
     for (int i = 0; i < ALL_NOTES; ++i) {
         voice->in_use[i] = 0;
     }
+    voice->set_note = set_note;
     voice->gate_on = gate_on;
     voice->gate_off = gate_off;
 }
@@ -74,33 +91,26 @@ void VoiceNoteOn(voice_t *voice, uint8_t note_number, uint8_t velocity)
         voice->in_use[voice->notes[MAX_NOTES-1]] = 0;
     } else {
         ++voice->num_notes;
-    }
-    for (int i = 1; i < voice->num_notes; ++i) {
+    }    
+    for (int i = voice->num_notes; --i > 0;) {
         voice->notes[i] = voice->notes[i - 1];
     }
     voice->notes[0] = note_number;
+    
+    // Update the hardware
+    voice->set_note(note_number);
+    voice->gate_on(velocity);
+    // LED_Driver_PutChar7Seg('N', 0);
+    // LED_Driver_Write7SegNumberHex(note_number, 1, 2, LED_Driver_RIGHT_ALIGN);
+
     voice->gate = 1;
     voice->in_use[note_number] = 1;
     voice->velocity = velocity;
-    
-    // Update the hardware
-    voice->gate_on(velocity);
-    LED_Driver_PutChar7Seg('N', 0);
-    LED_Driver_Write7SegNumberHex(note_number, 1, 2, LED_Driver_RIGHT_ALIGN);
 }
 
 void VoiceReactivateNote(voice_t *voice, uint8_t note_number, uint8_t velocity)
 {
-    for (int i = 0; i < voice->num_notes; ++i) {
-        if (voice->notes[i] == note_number) {
-            for (int j = i; j > 0; --j) {
-                voice->notes[i] = voice->notes[i-1];
-            }
-            voice->notes[0] = note_number;
-            voice->velocity = velocity;    
-            return;            
-        }
-    }
+    // no idea for now, do nothing
 }
 
 void VoiceNoteOff(voice_t *voice, uint8_t note_number)
@@ -108,23 +118,33 @@ void VoiceNoteOff(voice_t *voice, uint8_t note_number)
     if (!voice->in_use[note_number]) {
         return;
     }
-    int i;
-    for (i = 0; i < voice->num_notes; ++i) {
-        if (voice->notes[i] == note_number) {
+    int to_drop;
+    for (to_drop = 0; to_drop < voice->num_notes; ++to_drop) {
+        if (voice->notes[to_drop] == note_number) {
             break;
         }
     }
-    for (; i < voice->num_notes - 1; ++i) {
+    for (int i = to_drop; i < voice->num_notes - 1; ++i) {
         voice->notes[i] = voice->notes[i + 1];
     }
-    --voice->num_notes;
-    voice->gate = 0;
+    
     voice->in_use[note_number] = 0;
+    --voice->num_notes;
+    
+    if (to_drop > 0) {
+        // hidden note, do nothing
+        return;
+    }
 
-    // Update the hardware
-    voice->gate_off();
-    LED_Driver_PutChar7Seg('F', 0);
-    LED_Driver_Write7SegNumberHex(note_number, 1, 2, LED_Driver_RIGHT_ALIGN);    
+    if (voice->num_notes == 0) {
+        voice->gate = 0;
+        voice->gate_off();
+        // LED_Driver_PutChar7Seg('F', 0);
+        // LED_Driver_Write7SegNumberHex(note_number, 1, 2, LED_Driver_RIGHT_ALIGN);
+    } else {
+        voice->set_note(voice->notes[0]);
+        // retrigger?
+    }
 }
 
 void InitializeKeyAssigner(key_assigner_t *key_assigner, voice_t *voices[], int num_voices)
@@ -136,9 +156,15 @@ void InitializeKeyAssigner(key_assigner_t *key_assigner, voice_t *voices[], int 
 
 void SetUpDuophonic(key_assigner_t *assigner)
 {
-    InitializeVoice(duo_voices[0], Gate1On, Gate1Off);
-    InitializeVoice(duo_voices[1], Gate2On, Gate2Off);
+    InitializeVoice(duo_voices[0], SetNote1, Gate1On, Gate1Off);
+    InitializeVoice(duo_voices[1], SetNote2, Gate2On, Gate2Off);
     InitializeKeyAssigner(assigner, duo_voices, 2);
+}
+
+void SetUpUnison(key_assigner_t *assigner)
+{
+    InitializeVoice(&voices[0], SetBothNotes, BothGateOn, BothGateOff);
+    InitializeKeyAssigner(assigner, duo_voices, 1);
 }
 
 void NoteOn(key_assigner_t *assigner, uint8_t note_number, uint8_t velocity)
