@@ -18,6 +18,20 @@
 #define MAX_NOTES 32
 #define MAX_TRACK_HISTORY 8
 #define ALL_NOTES 128
+#define NUM_VOICES 2
+
+enum KeyAssignmentMode {
+    KEY_ASSIGN_DUOPHONIC = 0,
+    KEY_ASSIGN_UNISON,
+    KEY_ASSIGN_END,
+};
+
+enum KeyPriority {
+    KEY_PRIORITY_LATER = 0,
+    KEY_PRIORITY_HIGH,
+    KEY_PRIORITY_LOW,
+    KEY_PRIORITY_END,
+};
 
 typedef struct voice {
     uint8_t notes[MAX_NOTES];
@@ -28,16 +42,25 @@ typedef struct voice {
     void (*set_note)(uint8_t note_number);
     void (*gate_on)(uint8_t velocity);
     void (*gate_off)();
+    struct voice *next_voice;
 } voice_t;
 
+extern voice_t all_voices[NUM_VOICES];
+
 typedef struct key_assigner {
-    voice_t **voices;
+    voice_t *voices[NUM_VOICES];  // pre-allocate memory for the longest array
     int num_voices;
     int index_next_voice;
+    enum KeyPriority key_priority;
 } key_assigner_t;
 
-extern void SetUpDuophonic();
-extern void SetUpUnison();
+extern void InitializeVoices();
+
+extern key_assigner_t *InitializeKeyAssigner(key_assigner_t *, enum KeyPriority);
+extern void AddVoice(key_assigner_t *, voice_t *, enum KeyAssignmentMode);
+
+// extern void SetUpDuophonic();
+// extern void SetUpUnison();
 extern void NoteOn(key_assigner_t *key_assigner, uint8_t note_number, uint8_t velocity);
 extern void NoteOff(key_assigner_t *key_assigner, uint8_t note_number);
 

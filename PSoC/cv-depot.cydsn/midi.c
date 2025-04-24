@@ -10,12 +10,18 @@
  * ========================================
 */
 
+#include <string.h>
+
 #include "project.h"
+
+#include "eeprom.h"
 #include "midi.h"
 #include "key_assigner.h"
+#include "pot.h"
+#include "pot_change.h"
 
 #define MAX_SUPPORTED_MIDI_CHANNELS 2
-static midi_channel_t midi_channel_instances[MAX_SUPPORTED_MIDI_CHANNELS];
+// static midi_channel_t midi_channel_instances[MAX_SUPPORTED_MIDI_CHANNELS];
 
 /*---------------------------------------------------------*/
 /* MIDI constants                                          */
@@ -56,6 +62,8 @@ static midi_channel_t midi_channel_instances[MAX_SUPPORTED_MIDI_CHANNELS];
 
 /* Notes */
 #define C0 0x0B
+#define C4 0x3C
+#define A4 0x45
 
 /*---------------------------------------------------------*/
 /* Macros                                                  */
@@ -64,6 +72,11 @@ static midi_channel_t midi_channel_instances[MAX_SUPPORTED_MIDI_CHANNELS];
 #define IsChannelStatus(status)            ((status) < SYSEX_IN)
 #define RetrieveMessageFromStatus(status)  ((status) & 0xF0)
 #define RetrieveChannelFromStatus(status)  ((status) & 0x0F)
+
+/*---------------------------------------------------------*/
+/* MIDI config                                             */
+/*---------------------------------------------------------*/
+static midi_config_t midi_config;
 
 /*---------------------------------------------------------*/
 /* Decoder states                                          */
@@ -82,6 +95,77 @@ static key_assigner_t *key_assigners[NUM_MIDI_CHANNELS];
 
 static void HandleMidiChannelMessage();
 
+static uint8_t ReadEepromWithValueCheck(uint16_t address, uint8_t max)
+{
+    uint8_t value = EEPROM_ReadByte(address);
+    if (value >= max) {
+        return 0;
+    }
+    return value;
+}
+
+static void InitializeMidiDecoder();
+
+void InitMidiControllers()
+{
+    memset(&midi_config, 0, sizeof(midi_config));  // is it safe to use this?
+    
+    // Set Basic MIDI channels
+    midi_config.midi_channel_1 = ReadEepromWithValueCheck(ADDR_MIDI_CH_1, 16);
+    midi_config.midi_channel_2 = ReadEepromWithValueCheck(ADDR_MIDI_CH_2, 16);
+    midi_config.key_assignment_mode =
+        ReadEepromWithValueCheck(ADDR_KEY_ASSIGNMENT_MODE, KEY_ASSIGN_END);
+    midi_config.key_priority =
+        ReadEepromWithValueCheck(ADDR_KEY_PRIORITY, KEY_PRIORITY_END);
+
+    // Note CV
+    uint8_t wiper = EEPROM_ReadByte(ADDR_NOTE_1_WIPER);
+    PotChangePlaceRequest(&pot_note_1, -1);  // move to termianl B to ensure the starting position
+    PotChangePlaceRequest(&pot_note_1, wiper);
+    
+    wiper = EEPROM_ReadByte(ADDR_NOTE_2_WIPER);
+    PotChangePlaceRequest(&pot_note_2, -1);  // move to termianl B to ensure the starting position
+    PotChangePlaceRequest(&pot_note_2, wiper);
+
+    /*
+    uint8_t temp = EEPROM_ReadByte(ADDR_BEND_OFFSET);
+    if (temp == 0xd1) {
+        temp = EEPROM_ReadByte(ADDR_BEND_OFFSET + 1);
+        bend_offset = temp << 8;
+        temp = EEPROM_ReadByte(ADDR_BEND_OFFSET + 2);
+        bend_offset += temp;
+    } else { // initial value
+        bend_offset = BEND_STEPS / 2;
+    }
+    */
+    // bend_offset = BEND_STEPS / 2;
+    
+    // Gates
+    // Gate1Off();
+    // Gate2Off();
+    
+    // Bend
+    // BendPitch(0x00, PITCH_BEND_CENTER);  // set neutral
+
+    // Portament
+    Pin_Portament_En_Write(0);
+    // move pot terminals to B to ensure the starting positions
+    PotChangePlaceRequest(&pot_portament_1, -1);
+    PotChangePlaceRequest(&pot_portament_2, -1);
+    // then set the pot values
+    PotChangePlaceRequest(&pot_portament_1, 2);
+    PotChangePlaceRequest(&pot_portament_2, 2);
+    
+    InitializeVoices();
+    // set A4 to all voices and turn off gates
+    for (int i = 0; i < NUM_VOICES; ++i) {
+        all_voices[i].gate_off();
+        all_voices[i].set_note(A4);
+    }
+    
+    InitializeMidiDecoder();
+}
+
 void InitializeMidiDecoder()
 {
     midi_status = 0;
@@ -90,12 +174,19 @@ void InitializeMidiDecoder()
     midi_data_position = 0;
     midi_data_length = 0;
     
-    for (int i = 0; i < NUM_MIDI_CHANNELS; ++i) {
-        key_assigners[i] = NULL;
+    memset(key_assigners, 0, sizeof(key_assigners));
+    
+    // TODO: Generalize the implementation for N number of voices
+    key_assigners[midi_config.midi_channel_1] =
+        InitializeKeyAssigner(&key_assigner_instances[0], midi_config.key_priority);
+    AddVoice(&key_assigner_instances[0], &all_voices[0], midi_config.key_assignment_mode);
+
+    key_assigner_t *note_2_assigner = key_assigners[midi_config.midi_channel_2];
+    if (note_2_assigner == NULL) {
+        note_2_assigner = key_assigners[midi_config.midi_channel_2] =
+            InitializeKeyAssigner(&key_assigner_instances[1], midi_config.key_priority);
     }
-    SetUpDuophonic(&key_assigner_instances[0]);
-    // SetUpUnison(&key_assigner_instances[0]);
-    key_assigners[0] = &key_assigner_instances[0];
+    AddVoice(note_2_assigner, &all_voices[1], midi_config.key_assignment_mode);
 }
 
 void ConsumeMidiByte(uint8_t rx_byte)
@@ -104,7 +195,7 @@ void ConsumeMidiByte(uint8_t rx_byte)
       // Ignore system real-time messages (yet)
       return;
     }
-  
+
     // Ignore system messages
     if (IsInSystemExclusiveMode(midi_status)) {
         if (rx_byte == SYSEX_OUT) {
@@ -138,7 +229,7 @@ void ConsumeMidiByte(uint8_t rx_byte)
             midi_data_length = 1;
             break;
         }
-        
+
         // Reset the data index
         midi_data_position = 0;
         return;

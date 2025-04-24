@@ -111,8 +111,8 @@ static uint8_t midi_data_length;    // Expected MIDI data length
 static uint8_t basic_midi_channel; // The decoder picks up only this channel
 
 // Voice controller
-static uint8_t  voice_CurrentNote;
-static uint8_t  voices_NotesCount;
+// static uint8_t  voice_CurrentNote;
+// static uint8_t  voices_NotesCount;
 // static uint8_t  voices_Notes[MAX_NOTE_COUNT];
 
 // other controller values
@@ -120,7 +120,7 @@ static uint8_t  voices_NotesCount;
 // CV values since we apply anti-click mechanism to the CV values in
 // transition to make the pitch change smooth.
 // static int16_t ctrl_PitchBend;
-static uint8_t ctrl_PitchBend_updating;
+// static uint8_t ctrl_PitchBend_updating;
 uint16_t bend_offset;
 
 #define VELOCITY_DAC_VALUE(velocity) (((velocity) * (velocity)) >> 3)
@@ -206,7 +206,6 @@ static void InitMidiParameters()
     ctrl_PitchBend_updating = 0;
 }
 
-#endif
 
 static void InitMidiControllers()
 {
@@ -254,7 +253,6 @@ static void InitMidiControllers()
     Pin_Portament_En_Write(0);
 }
 
-#if 0
 void HandleMidiChannelMessage()
 {
     // do nothing for channels that are out of scope
@@ -388,7 +386,7 @@ int main(void)
 
     // Initialization ////////////////////////////////////
     EEPROM_Start();
-    InitializeMidiDecoder();
+    // InitializeMidiDecoder();
     // InitMidiParameters();
     PotGlobalInit();
     

@@ -17,7 +17,18 @@
 #pragma once
     
 #define NUM_MIDI_CHANNELS 16
-    
+
+/**
+ * Global MIDI configuration
+ */
+typedef struct midi_config {
+    enum KeyAssignmentMode key_assignment_mode;
+    uint8_t midi_channel_1;  // MIDI channel for note 1
+    uint8_t midi_channel_2;  // MIDI channel for note 2
+    enum KeyPriority key_priority;
+} midi_config_t;
+
+#if 0
 /**
  * MIDI channel configuration and state
  */
@@ -32,16 +43,10 @@ typedef struct midi_channel {
     uint8_t data_position;  // MIDI data buffer pointer
     uint8_t data_length;    // Expected MIDI data length
 } midi_channel_t;
+#endif
 
-/**
- * Global MIDI configuration
- */
-typedef struct midi_config {
-    uint8_t num_channels;  // Number of MIDI channels to handle
-    midi_channel_t *channels[NUM_MIDI_CHANNELS]; // MIDI channel mapping
-} midi_config_t;
-
-extern void InitializeMidiDecoder();
+extern void InitMidiControllers();
+// extern void InitializeMidiDecoder();
 
 /**
  * Handles a byte from the MIDI UART module.
