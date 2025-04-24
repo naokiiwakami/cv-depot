@@ -54,13 +54,24 @@ typedef struct key_assigner {
     enum KeyPriority key_priority;
 } key_assigner_t;
 
+/**
+ * Initializes all voices.
+ */
 extern void InitializeVoices();
 
+/**
+ * Clears a key assigner.
+ */
 extern key_assigner_t *InitializeKeyAssigner(key_assigner_t *, enum KeyPriority);
+
+/**
+ * Adds a voice to a key assigner.
+ */
+// TODO: Consider moving the param key_assignment_mode to
+//   InitializeKeyAssigner as the mode must be consistent in an assigner.
 extern void AddVoice(key_assigner_t *, voice_t *, enum KeyAssignmentMode);
 
-// extern void SetUpDuophonic();
-// extern void SetUpUnison();
+// Requests for performance actions
 extern void NoteOn(key_assigner_t *key_assigner, uint8_t note_number, uint8_t velocity);
 extern void NoteOff(key_assigner_t *key_assigner, uint8_t note_number);
 

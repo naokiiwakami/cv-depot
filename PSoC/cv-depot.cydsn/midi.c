@@ -21,7 +21,6 @@
 #include "pot_change.h"
 
 #define MAX_SUPPORTED_MIDI_CHANNELS 2
-// static midi_channel_t midi_channel_instances[MAX_SUPPORTED_MIDI_CHANNELS];
 
 /*---------------------------------------------------------*/
 /* MIDI constants                                          */
@@ -108,7 +107,7 @@ static void InitializeMidiDecoder();
 
 void InitMidiControllers()
 {
-    memset(&midi_config, 0, sizeof(midi_config));  // is it safe to use this?
+    memset(&midi_config, 0, sizeof(midi_config));  // is memset safe to use?
     
     // Set Basic MIDI channels
     midi_config.midi_channel_1 = ReadEepromWithValueCheck(ADDR_MIDI_CH_1, 16);

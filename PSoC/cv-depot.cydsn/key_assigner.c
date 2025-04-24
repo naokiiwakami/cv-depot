@@ -122,15 +122,6 @@ void VoiceNoteOff(voice_t *voice, uint8_t note_number)
     }
 }
 
-/*
-void InitializeKeyAssigner(key_assigner_t *key_assigner, voice_t *voices[], int num_voices)
-{
-    key_assigner->voices = voices;
-    key_assigner->num_voices = num_voices;
-    key_assigner->index_next_voice = 0;
-}
-*/
-
 static void InitializeVoice(voice_t *voice, void (*set_note)(uint8_t), void (*gate_on)(uint8_t), void (*gate_off)())
 {
     voice->num_notes = 0;
@@ -219,7 +210,6 @@ void NoteOn(key_assigner_t *assigner, uint8_t note_number, uint8_t velocity)
 
 void NoteOff(key_assigner_t *assigner, uint8_t note_number)
 {
-    // voice_t *next_voice = NULL;
     for (int i = 0; i < assigner->num_voices; ++i) {
         VoiceNoteOff(assigner->voices[i], note_number);
     }
