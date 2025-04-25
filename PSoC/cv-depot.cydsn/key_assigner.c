@@ -17,6 +17,8 @@
 
 #include "key_assigner.h"
 
+const char *kKeyAssignmentModeName[KEY_ASSIGN_END] = { "duo", "uni", "par" };
+
 voice_t all_voices[NUM_VOICES];
 
 #define VELOCITY_DAC_VALUE(velocity) (((velocity) * (velocity)) >> 3)
@@ -152,14 +154,14 @@ key_assigner_t *InitializeKeyAssigner(key_assigner_t *key_assigner, enum KeyPrio
 
 void AddVoice(key_assigner_t *assigner, voice_t *voice, enum KeyAssignmentMode key_assignment_mode)
 {
-    if (key_assignment_mode == KEY_ASSIGN_DUOPHONIC) {
-        assigner->voices[assigner->num_voices++] = voice;
-    } else if (key_assignment_mode == KEY_ASSIGN_UNISON) {
+    if (key_assignment_mode == KEY_ASSIGN_UNISON) {
         if (assigner->num_voices == 0) {
             assigner->voices[assigner->num_voices++] = voice;
         } else {
             assigner->voices[0]->next_voice = voice;
         }
+    } else { // duophonic or parallel
+        assigner->voices[assigner->num_voices++] = voice;
     }
     voice->next_voice = NULL;
 }

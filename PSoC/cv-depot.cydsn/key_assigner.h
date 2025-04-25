@@ -10,9 +10,9 @@
  * ========================================
 */
 
-#include <stdint.h>
-
 #pragma once
+
+#include <stdint.h>
 
 // Maximum number of notes to track history in a voice
 #define MAX_NOTES 32
@@ -23,8 +23,11 @@
 enum KeyAssignmentMode {
     KEY_ASSIGN_DUOPHONIC = 0,
     KEY_ASSIGN_UNISON,
+    KEY_ASSIGN_PARALLEL,
     KEY_ASSIGN_END,
 };
+
+extern const char *kKeyAssignmentModeName[KEY_ASSIGN_END];
 
 enum KeyPriority {
     KEY_PRIORITY_LATER = 0,

@@ -17,6 +17,7 @@
 #include "midi.h"
 #include "pot.h"
 #include "pot_change.h"
+#include "settings.h"
 
 // Interrupt handler declarations
 CY_ISR_PROTO(SwitchHandler);
@@ -26,25 +27,50 @@ CY_ISR_PROTO(SwitchHandler);
 
 volatile uint8_t mode = MODE_NORMAL;
 
+uint16_t bend_offset;
+
+#if 0
 typedef struct menu {
     const char *name;
     void (*func)();
 } menu_t;
 
-static void SetMidiChannel();
-// static void Calibrate();
+static void SetKeyAssignment();
+static void SetMidiChannel1();
+static void SetMidiChannel2();
 static void Diagnose();
 
-static int8_t menu_item = -1;
+volatile int8_t menu_item = -1;
 
-static menu_t menus[] = {
-    { "ch ", SetMidiChannel }, // set MIDI channel
-    { "cal", Calibrate }, // calibrate bend center position
-    { "dgn", Diagnose }, // diagnose hardware
-    { NULL, NULL },
-};
+// Menu items would change by the configuration. The menu is built on demand by the switch interrupt
+// handler. It should be done quickly, so the menu items are kept in the static space.
+static const menu_t kMenuSetKeyAssignment = { "asn", SetKeyAssignment };
+static const menu_t kMenuSetChannel = { "ch ", SetMidiChannel1 }; // set MIDI channels for the both voices
+static const menu_t kMenuSetChannel1 = { "ch1", SetMidiChannel1 }; // set MIDI channel for voice 1
+static const menu_t kMenuSetChannel2 = { "ch2", SetMidiChannel2 }; // set MIDI channel for voice 2
+static const menu_t kMenuCalibrate = { "cal", Calibrate }; // calibrate bend center position
+static const menu_t kMenuDiagnose = { "dgn", Diagnose }; // diagnose hardware
 
-static uint8_t basic_midi_channel; // The decoder picks up only this channel
+#define MAX_MENU_SIZE 8
+static volatile menu_t menu[MAX_MENU_SIZE];
+static volatile uint8_t menu_size = 0;
+
+static void BuildMenu()
+{
+    uint8_t i = 0;
+    menu[i++] = kMenuSetKeyAssignment;
+    if (midi_config.key_assignment_mode != KEY_ASSIGN_PARALLEL) {
+        menu[i++] = kMenuSetChannel;
+    } else {
+        menu[i++] = kMenuSetChannel1;
+        menu[i++] = kMenuSetChannel2;
+    }
+    menu[i++] = kMenuCalibrate;
+    menu[i++] = kMenuDiagnose;
+    menu_size = i;
+}
+
+// static uint8_t basic_midi_channel; // The decoder picks up only this channel
 
 // Voice controller
 // static uint8_t  voice_CurrentNote;
@@ -63,12 +89,33 @@ uint16_t bend_offset;
 #define INDICATOR_VALUE(velocity) ((velocity) >= 64 ? (((velocity) - 63)  * ((velocity) - 63)) / 32 - 1 : 0)
 #define NOTE_PWM_MAX_VALUE 120
 
-void SetMidiChannel()
+static void SetKeyAssignment()
+{
+    mode = MODE_KEY_ASSIGNMENT_SETUP;
+    GREEN_ENCODER_LED_ON();
+    RED_ENCODER_LED_ON();
+    QuadDec_SetCounter(midi_config.key_assignment_mode);
+}
+
+static void SetMidiChannel(uint8_t selected_voice)
 {
     mode = MODE_MIDI_CHANNEL_SETUP;
-    Pin_Encoder_LED_2_Write(1);
-    int16_t encoder_value = basic_midi_channel;
-    QuadDec_SetCounter(encoder_value + 16384);
+    midi_config.selected_voice = selected_voice;
+    GREEN_ENCODER_LED_ON();
+    RED_ENCODER_LED_ON();
+    int16_t encoder_value = midi_config.midi_channels[selected_voice];
+    // QuadDec_SetCounter(encoder_value + 16384);
+    QuadDec_SetCounter(encoder_value);
+}
+
+void SetMidiChannel1()
+{
+    SetMidiChannel(0);
+}
+
+void SetMidiChannel2()
+{
+    SetMidiChannel(1);
 }
 
 void Diagnose() {
@@ -97,6 +144,8 @@ void Diagnose() {
     LED_Driver_ClearDisplayAll();
     mode = MODE_NORMAL;
 }
+
+#endif
 
 int main(void)
 {
@@ -133,36 +182,9 @@ int main(void)
             uint8_t rx_byte = UART_Midi_ReadRxData();
             ConsumeMidiByte(rx_byte);
         }
-        switch (mode) {
-        case MODE_MENU_SELECTING: {
-            int16_t counter_value = QuadDec_GetCounter();
-            uint8_t temp = counter_value % (sizeof(menus) / sizeof(menu_t) - 1);
-            LED_Driver_WriteString7Seg(menus[temp].name, 0);
-            break;
-        }
-        case MODE_MENU_SELECTED: {
-            if (menu_item >= 0) {
-                uint8_t temp = menu_item;
-                menu_item = -1;
-                menus[temp].func();
-            }
-            break;
-        }
-        case MODE_MIDI_CHANNEL_SETUP: {
-            int16_t counter_value = QuadDec_GetCounter();
-            basic_midi_channel = counter_value % 16;
-            LED_Driver_Write7SegNumberDec(basic_midi_channel + 1, 1, 2, LED_Driver_RIGHT_ALIGN);
-            break;
-        }
-        case MODE_MIDI_CHANNEL_CONFIRMED:
-            Pin_Encoder_LED_2_Write(0);
-            EEPROM_UpdateTemperature();
-            EEPROM_WriteByte(basic_midi_channel, ADDR_MIDI_CH);
-            LED_Driver_ClearDisplayAll();
-            mode = MODE_NORMAL;
-            break;
-        }
-        
+        if (mode != MODE_NORMAL) {
+            HandleSettingModes();
+        }        
         // Consume pot change requests if not empty
         PotChangeHandleRequests();
     }
@@ -170,29 +192,7 @@ int main(void)
 
 CY_ISR(SwitchHandler)
 {
-    switch (mode) {
-    case MODE_NORMAL:
-        QuadDec_SetCounter(0);
-        mode = MODE_MENU_SELECTING;
-        Pin_Encoder_LED_1_Write(1);
-        break;
-    case MODE_MENU_SELECTING: {
-        int16_t counter_value = QuadDec_GetCounter();
-        menu_item = counter_value % (sizeof(menus) / sizeof(menu_t) - 1);
-        mode = MODE_MENU_SELECTED;
-        Pin_Encoder_LED_1_Write(0);
-        break;
-    }
-    case MODE_MIDI_CHANNEL_SETUP:
-        mode = MODE_MIDI_CHANNEL_CONFIRMED;
-        break;
-    case MODE_CALIBRATION_INIT:
-        mode = MODE_CALIBRATION_BEND_WIDTH;
-        break;
-    case MODE_CALIBRATION_BEND_WIDTH:
-        mode = MODE_NORMAL;
-        break;
-    }
+    HandleSwitchEvent();
 }
 
 /* [] END OF FILE */

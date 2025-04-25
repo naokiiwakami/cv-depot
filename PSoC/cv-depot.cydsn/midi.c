@@ -20,6 +20,14 @@
 #include "pot.h"
 #include "pot_change.h"
 
+/*---------------------------------------------------------*/
+/* Global variables                                        */
+/*---------------------------------------------------------*/
+midi_config_t midi_config;
+
+/*---------------------------------------------------------*/
+/* Platfor specific                                        */
+/*---------------------------------------------------------*/
 #define MAX_SUPPORTED_MIDI_CHANNELS 2
 
 /*---------------------------------------------------------*/
@@ -73,11 +81,6 @@
 #define RetrieveChannelFromStatus(status)  ((status) & 0x0F)
 
 /*---------------------------------------------------------*/
-/* MIDI config                                             */
-/*---------------------------------------------------------*/
-static midi_config_t midi_config;
-
-/*---------------------------------------------------------*/
 /* Decoder states                                          */
 /*---------------------------------------------------------*/
 static uint8_t midi_status;
@@ -103,15 +106,13 @@ static uint8_t ReadEepromWithValueCheck(uint16_t address, uint8_t max)
     return value;
 }
 
-static void InitializeMidiDecoder();
-
 void InitMidiControllers()
 {
     memset(&midi_config, 0, sizeof(midi_config));  // is memset safe to use?
     
     // Set Basic MIDI channels
-    midi_config.midi_channel_1 = ReadEepromWithValueCheck(ADDR_MIDI_CH_1, 16);
-    midi_config.midi_channel_2 = ReadEepromWithValueCheck(ADDR_MIDI_CH_2, 16);
+    midi_config.midi_channels[0] = ReadEepromWithValueCheck(ADDR_MIDI_CH_1, 16);
+    midi_config.midi_channels[1] = ReadEepromWithValueCheck(ADDR_MIDI_CH_2, 16);
     midi_config.key_assignment_mode =
         ReadEepromWithValueCheck(ADDR_KEY_ASSIGNMENT_MODE, KEY_ASSIGN_END);
     midi_config.key_priority =
@@ -176,16 +177,38 @@ void InitializeMidiDecoder()
     memset(key_assigners, 0, sizeof(key_assigners));
     
     // TODO: Generalize the implementation for N number of voices
-    key_assigners[midi_config.midi_channel_1] =
+    key_assigners[midi_config.midi_channels[0]] =
         InitializeKeyAssigner(&key_assigner_instances[0], midi_config.key_priority);
     AddVoice(&key_assigner_instances[0], &all_voices[0], midi_config.key_assignment_mode);
 
-    key_assigner_t *note_2_assigner = key_assigners[midi_config.midi_channel_2];
+    key_assigner_t *note_2_assigner = key_assigners[midi_config.midi_channels[1]];
     if (note_2_assigner == NULL) {
-        note_2_assigner = key_assigners[midi_config.midi_channel_2] =
+        note_2_assigner = key_assigners[midi_config.midi_channels[1]] =
             InitializeKeyAssigner(&key_assigner_instances[1], midi_config.key_priority);
     }
     AddVoice(note_2_assigner, &all_voices[1], midi_config.key_assignment_mode);
+}
+
+void CommitMidiChannelChange()
+{
+    uint8_t selected_voice = midi_config.selected_voice;
+    EEPROM_UpdateTemperature();
+    EEPROM_WriteByte(midi_config.midi_channels[selected_voice], ADDR_MIDI_CH_1 + selected_voice);
+    if (midi_config.key_assignment_mode != KEY_ASSIGN_PARALLEL) {
+        // assume the selected_voice is 0
+        midi_config.midi_channels[1] = midi_config.midi_channels[0];
+        EEPROM_WriteByte(midi_config.midi_channels[selected_voice], ADDR_MIDI_CH_2);
+    }
+    // Key assignment mode may have changed, too. We'll save it blindly.
+    EEPROM_WriteByte(midi_config.key_assignment_mode, ADDR_KEY_ASSIGNMENT_MODE);    
+    InitializeMidiDecoder();
+}
+
+void CommitKeyAssignmentModeChange()
+{
+    EEPROM_UpdateTemperature();
+    EEPROM_WriteByte(midi_config.key_assignment_mode, ADDR_KEY_ASSIGNMENT_MODE);
+    InitializeMidiDecoder();
 }
 
 void ConsumeMidiByte(uint8_t rx_byte)
@@ -249,7 +272,7 @@ void ConsumeMidiByte(uint8_t rx_byte)
 
 void HandleMidiChannelMessage()
 {
-    // do nothing for channels that are out of scope
+    // do nothing for a channel that is out of scope
     key_assigner_t *key_assigner = key_assigners[midi_channel];
     if (key_assigner == NULL) {
         return;
