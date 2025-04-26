@@ -23,6 +23,9 @@ typedef struct menu {
     void (*func)();
 } menu_t;
 
+static void StartRedBlinking();
+static void StartFinalization();
+
 static void InitiateKeyAssignSetup();
 static void InitiateMidiChannelSetup1();
 static void InitiateMidiChannelSetup2();
@@ -90,6 +93,12 @@ static void InitiateMidiChannelSetup(const midi_config_t *midi_config, enum Voic
     setup_state.mode.midi.config = *midi_config;
     setup_state.mode.midi.selected_voice = selected_voice;
     setup_state.mode.midi.blink_count = 0;
+
+    uint8_t value = selected_voice == VOICE_1 ? 0x1 << 5 : 0x1 << 2;
+    if (midi_config->key_assignment_mode != KEY_ASSIGN_PARALLEL) {
+        value |= 0x1 << 2;
+    }
+    LED_Driver_SetDisplayRAM(value, 0);
 }
 
 void InitiateMidiChannelSetup1()
@@ -190,8 +199,6 @@ static void HandleMidiChannelSetup()
     }
 }
 
-static void StartRedBlinking();
-
 static void ConfirmMidiChannelSetup()
 {
     volatile midi_config_t *midi_config = &setup_state.mode.midi.config;
@@ -207,11 +214,9 @@ static void ConfirmMidiChannelSetup()
         enum Voice selected_voice = setup_state.mode.midi.selected_voice;
         midi_config->channels[(selected_voice + 1) % NUM_VOICES] = midi_config->channels[selected_voice];
     }
-    GREEN_ENCODER_LED_OFF();
-    RED_ENCODER_LED_OFF();
 
     CommitMidiConfigChange((const midi_config_t*) midi_config);
-    LED_Driver_ClearDisplayAll();
+    StartFinalization();
     mode = MODE_NORMAL;
 }
 
@@ -239,7 +244,7 @@ static void ConfirmKeyAssignmentMode()
         return;
     }
     CommitMidiConfigChange(midi_config);
-    LED_Driver_ClearDisplayAll();
+    StartFinalization();
     mode = MODE_NORMAL;
 }
 
@@ -321,18 +326,47 @@ static void RedBlink()
     }
 }
 
-void StartRedBlinking() {
+static void FinalizationBlink()
+{
+    GREEN_ENCODER_LED_TOGGLE();
+    if (--setup_state.mode.midi.blink_count == 0) {
+        CySysTickStop();
+        GREEN_ENCODER_LED_OFF();
+        LED_Driver_ClearDisplayAll();
+    }
+}
+
+static void InitSysTimer()
+{
     CySysTickInit();
     CySysTickSetClockSource(CY_SYS_SYST_CSR_CLK_SRC_LFCLK);
     CySysTickSetReload(100000 / 1000 * 100); // 100ms
     CySysTickDisableInterrupt();
-    CySysTickSetCallback(0, RedBlink);
     CySysTickEnableInterrupt();
+}
+
+static void StartSysTimer()
+{
     CySysTickClear();
+    CySysTickEnable();
+}
+
+void StartRedBlinking() {
+    InitSysTimer();
+    CySysTickSetCallback(0, RedBlink);
     setup_state.mode.midi.blink_count = 10;
     RED_ENCODER_LED_ON();
     GREEN_ENCODER_LED_OFF();
-    CySysTickEnable();
+    StartSysTimer();
+}
+
+void StartFinalization() {
+    InitSysTimer();
+    CySysTickSetCallback(0, FinalizationBlink);
+    setup_state.mode.midi.blink_count = 10;
+    GREEN_ENCODER_LED_ON();
+    RED_ENCODER_LED_OFF();
+    StartSysTimer();
 }
 
 /* [] END OF FILE */
