@@ -23,15 +23,18 @@
  */
 typedef struct midi_config {
     enum KeyAssignmentMode key_assignment_mode;
-    uint8_t midi_channels[NUM_VOICES];  // MIDI channels for notes
-    uint8_t selected_voice;  // Referred by the user interface
+    uint8_t channels[NUM_VOICES];  // MIDI channels for notes
     enum KeyPriority key_priority;
 } midi_config_t;
 
-extern midi_config_t midi_config;
-
 extern void InitMidiControllers();
 extern void InitializeMidiDecoder();
+
+/**
+ * Accesses to the master MIDI config are done through these methods.
+ */
+extern const midi_config_t *GetMidiConfig();
+extern void CommitMidiConfigChange(const midi_config_t *new_config);
 
 /**
  * Changes MIDI channels.

@@ -21,9 +21,9 @@
 #include "pot_change.h"
 
 /*---------------------------------------------------------*/
-/* Global variables                                        */
+/* The master MIDI config                                  */
 /*---------------------------------------------------------*/
-midi_config_t midi_config;
+static midi_config_t midi_config;
 
 /*---------------------------------------------------------*/
 /* Platfor specific                                        */
@@ -111,8 +111,8 @@ void InitMidiControllers()
     memset(&midi_config, 0, sizeof(midi_config));  // is memset safe to use?
     
     // Set Basic MIDI channels
-    midi_config.midi_channels[0] = ReadEepromWithValueCheck(ADDR_MIDI_CH_1, 16);
-    midi_config.midi_channels[1] = ReadEepromWithValueCheck(ADDR_MIDI_CH_2, 16);
+    midi_config.channels[0] = ReadEepromWithValueCheck(ADDR_MIDI_CH_1, 16);
+    midi_config.channels[1] = ReadEepromWithValueCheck(ADDR_MIDI_CH_2, 16);
     midi_config.key_assignment_mode =
         ReadEepromWithValueCheck(ADDR_KEY_ASSIGNMENT_MODE, KEY_ASSIGN_END);
     midi_config.key_priority =
@@ -177,37 +177,41 @@ void InitializeMidiDecoder()
     memset(key_assigners, 0, sizeof(key_assigners));
     
     // TODO: Generalize the implementation for N number of voices
-    key_assigners[midi_config.midi_channels[0]] =
+    key_assigners[midi_config.channels[0]] =
         InitializeKeyAssigner(&key_assigner_instances[0], midi_config.key_priority);
     AddVoice(&key_assigner_instances[0], &all_voices[0], midi_config.key_assignment_mode);
 
-    key_assigner_t *note_2_assigner = key_assigners[midi_config.midi_channels[1]];
+    key_assigner_t *note_2_assigner = key_assigners[midi_config.channels[1]];
     if (note_2_assigner == NULL) {
-        note_2_assigner = key_assigners[midi_config.midi_channels[1]] =
+        note_2_assigner = key_assigners[midi_config.channels[1]] =
             InitializeKeyAssigner(&key_assigner_instances[1], midi_config.key_priority);
     }
     AddVoice(note_2_assigner, &all_voices[1], midi_config.key_assignment_mode);
 }
 
-void CommitMidiChannelChange()
+const midi_config_t *GetMidiConfig()
 {
-    uint8_t selected_voice = midi_config.selected_voice;
-    EEPROM_UpdateTemperature();
-    EEPROM_WriteByte(midi_config.midi_channels[selected_voice], ADDR_MIDI_CH_1 + selected_voice);
-    if (midi_config.key_assignment_mode != KEY_ASSIGN_PARALLEL) {
-        // assume the selected_voice is 0
-        midi_config.midi_channels[1] = midi_config.midi_channels[0];
-        EEPROM_WriteByte(midi_config.midi_channels[selected_voice], ADDR_MIDI_CH_2);
-    }
-    // Key assignment mode may have changed, too. We'll save it blindly.
-    EEPROM_WriteByte(midi_config.key_assignment_mode, ADDR_KEY_ASSIGNMENT_MODE);    
-    InitializeMidiDecoder();
+    return &midi_config;
 }
 
-void CommitKeyAssignmentModeChange()
+void CommitMidiConfigChange(const midi_config_t *new_config)
 {
+    // Save changes
     EEPROM_UpdateTemperature();
-    EEPROM_WriteByte(midi_config.key_assignment_mode, ADDR_KEY_ASSIGNMENT_MODE);
+    for (int voice = 0; voice < NUM_VOICES; ++voice) {
+        if (new_config->channels[voice] != midi_config.channels[voice]) {
+            EEPROM_WriteByte(new_config->channels[0], ADDR_MIDI_CH_1 + voice);
+        }
+    }
+    if (new_config->key_assignment_mode != midi_config.key_assignment_mode) {
+        EEPROM_WriteByte(new_config->key_assignment_mode, ADDR_KEY_ASSIGNMENT_MODE);
+    }
+    if (new_config->key_priority != midi_config.key_priority) {
+        EEPROM_WriteByte(new_config->key_priority, ADDR_KEY_PRIORITY);
+    }
+
+    // Reflect changes
+    midi_config = *new_config;
     InitializeMidiDecoder();
 }
 
