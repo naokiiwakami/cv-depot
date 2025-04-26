@@ -41,8 +41,9 @@ static const menu_t kMenuDiagnose = { "dgn", Diagnose }; // diagnose hardware
 static volatile menu_t menu[MAX_MENU_SIZE];
 static volatile uint8_t menu_size = 0;
 
-static volatile int8_t menu_item = -1;
 static volatile int16_t prev_counter_value = 0;
+
+static volatile int8_t menu_item = -1;
 
 static void BuildMenu()
 {
@@ -59,6 +60,30 @@ static void BuildMenu()
     menu_size = i;
 }
 
+static volatile uint8_t blink_count = 0;
+
+static void RedBlink()
+{
+    RED_ENCODER_LED_TOGGLE();
+    if (--blink_count == 0) {
+        CySysTickStop();
+    }
+}
+
+static void StartRedBlinking() {
+    CySysTickInit();
+    CySysTickSetClockSource(CY_SYS_SYST_CSR_CLK_SRC_LFCLK);
+    CySysTickSetReload(100000 / 1000 * 100); // 100ms
+    CySysTickDisableInterrupt();
+    CySysTickSetCallback(0, RedBlink);
+    CySysTickEnableInterrupt();
+    CySysTickClear();
+    blink_count = 10;
+    RED_ENCODER_LED_ON();
+    GREEN_ENCODER_LED_OFF();
+    CySysTickEnable();
+}
+
 static void SetMidiChannel(enum Voice selected_voice)
 {
     mode = MODE_MIDI_CHANNEL_SETUP;
@@ -66,7 +91,6 @@ static void SetMidiChannel(enum Voice selected_voice)
     GREEN_ENCODER_LED_ON();
     RED_ENCODER_LED_ON();
     int16_t encoder_value = midi_config.midi_channels[selected_voice];
-    // QuadDec_SetCounter(encoder_value + 16384);
     QuadDec_SetCounter(encoder_value);
     prev_counter_value = -1;
 }
@@ -155,11 +179,25 @@ static void HandleMidiChannelSetup()
     if (value >= 0) {
         midi_config.midi_channels[midi_config.selected_voice] = value;
         LED_Driver_Write7SegNumberDec(value + 1, 1, 2, LED_Driver_RIGHT_ALIGN);
+        if (midi_config.key_assignment_mode == KEY_ASSIGN_PARALLEL) {
+            if (midi_config.midi_channels[VOICE_1] == midi_config.midi_channels[VOICE_2]) {
+                GREEN_ENCODER_LED_OFF();
+            } else {
+                GREEN_ENCODER_LED_ON();
+            }
+        }
     }
 }
 
 static void ConfirmMidiChannelSetup()
 {
+    if (midi_config.key_assignment_mode == KEY_ASSIGN_PARALLEL
+        && midi_config.midi_channels[VOICE_1] == midi_config.midi_channels[VOICE_2]) {
+        // Error, go back to setup mode
+        mode = MODE_MIDI_CHANNEL_SETUP;
+        StartRedBlinking();
+        return;
+    }
     GREEN_ENCODER_LED_OFF();
     RED_ENCODER_LED_OFF();
     CommitMidiChannelChange();
@@ -181,7 +219,12 @@ static void ConfirmKeyAssignmentMode()
     GREEN_ENCODER_LED_OFF();
     RED_ENCODER_LED_OFF();
     if (midi_config.key_assignment_mode == KEY_ASSIGN_PARALLEL) {
-        SetMidiChannel(VOICE_2);
+        if (midi_config.midi_channels[VOICE_1] == midi_config.midi_channels[VOICE_2]) {
+          SetMidiChannel(VOICE_2);
+          return;
+        }
+    } else if (midi_config.midi_channels[VOICE_1] != midi_config.midi_channels[VOICE_2]) {
+        SetMidiChannel1();
         return;
     }
     CommitKeyAssignmentModeChange();
