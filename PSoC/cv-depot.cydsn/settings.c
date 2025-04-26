@@ -23,6 +23,7 @@ typedef struct menu {
     void (*func)();
 } menu_t;
 
+static int8_t PickUpChangedEncoderValue(uint8_t range);
 static void StartRedBlinking();
 static void StartFinalization();
 
@@ -65,7 +66,7 @@ struct setup_state {
     } mode;
 };
 
-static volatile struct setup_state setup_state = {};
+static struct setup_state setup_state = {};
 
 static void BuildMenu()
 {
@@ -150,31 +151,29 @@ void Diagnose() {
     mode = MODE_NORMAL;
 }
 
-static int8_t PickUpChangedEncoderValue(uint8_t range)
-{
-    int16_t counter_value = QuadDec_GetCounter();
-    if (counter_value == setup_state.prev_counter_value) {
-        return -1;
-    }
-    setup_state.prev_counter_value = counter_value;
-    if (counter_value >= 0) {
-        return counter_value % range;
-    }
-    return (counter_value + 1) % range + range - 1; 
-}
-
 // Settings event handlers ///////////////////////////////////////////////////
+
+static void InvokeMenu()
+{
+    BuildMenu();
+    QuadDec_SetCounter(0);
+    setup_state.prev_counter_value = - 1;
+    mode = MODE_MENU_SELECTING;
+    GREEN_ENCODER_LED_ON();
+}
 
 static void HandleMenuSelection()
 {
     int8_t index = PickUpChangedEncoderValue(setup_state.mode.menu.menu_size);
     if (index >= 0) {
         LED_Driver_WriteString7Seg(setup_state.mode.menu.menu[index]->name, 0);
+        setup_state.mode.menu.menu_item = index;
     }
 }
 
 static void ConfirmMenuSelection()
 {
+    GREEN_ENCODER_LED_OFF();
     if (setup_state.mode.menu.menu_item >= 0) {
         uint8_t temp = setup_state.mode.menu.menu_item;
         setup_state.mode.menu.menu_item = -1;
@@ -186,7 +185,7 @@ static void HandleMidiChannelSetup()
 {
     int8_t value = PickUpChangedEncoderValue(NUM_MIDI_CHANNELS);
     if (value >= 0) {
-        volatile midi_config_t *midi_config = &setup_state.mode.midi.config;
+        midi_config_t *midi_config = &setup_state.mode.midi.config;
         midi_config->channels[setup_state.mode.midi.selected_voice] = value;
         LED_Driver_Write7SegNumberDec(value + 1, 1, 2, LED_Driver_RIGHT_ALIGN);
         if (midi_config->key_assignment_mode == KEY_ASSIGN_PARALLEL) {
@@ -201,7 +200,7 @@ static void HandleMidiChannelSetup()
 
 static void ConfirmMidiChannelSetup()
 {
-    volatile midi_config_t *midi_config = &setup_state.mode.midi.config;
+    midi_config_t *midi_config = &setup_state.mode.midi.config;
     if (midi_config->key_assignment_mode == KEY_ASSIGN_PARALLEL) {
         if (midi_config->channels[VOICE_1] == midi_config->channels[VOICE_2]) {
             // Error, go back to the setup mode
@@ -215,7 +214,7 @@ static void ConfirmMidiChannelSetup()
         midi_config->channels[(selected_voice + 1) % NUM_VOICES] = midi_config->channels[selected_voice];
     }
 
-    CommitMidiConfigChange((const midi_config_t*) midi_config);
+    CommitMidiConfigChange(midi_config);
     StartFinalization();
     mode = MODE_NORMAL;
 }
@@ -233,7 +232,7 @@ static void ConfirmKeyAssignmentMode()
 {
     GREEN_ENCODER_LED_OFF();
     RED_ENCODER_LED_OFF();
-    const midi_config_t *midi_config = (const midi_config_t*) &setup_state.mode.midi.config;
+    const midi_config_t *midi_config = &setup_state.mode.midi.config;
     if (midi_config->key_assignment_mode == KEY_ASSIGN_PARALLEL) {
         if (midi_config->channels[VOICE_1] == midi_config->channels[VOICE_2]) {
           InitiateMidiChannelSetup(midi_config, VOICE_2);
@@ -257,6 +256,9 @@ static void ConfirmKeyAssignmentMode()
 void HandleSettingModes()
 {
     switch (mode) {
+    case MODE_MENU_INVOKING:
+        InvokeMenu();
+        break;
     case MODE_MENU_SELECTING:
         HandleMenuSelection();
         break;
@@ -285,20 +287,11 @@ void HandleSwitchEvent()
 {
     switch (mode) {
     case MODE_NORMAL: {
-        BuildMenu();
-        QuadDec_SetCounter(0);
-        setup_state.prev_counter_value = - 1;
-        mode = MODE_MENU_SELECTING;
-        GREEN_ENCODER_LED_ON();
+        mode = MODE_MENU_INVOKING;
         break;
     }
     case MODE_MENU_SELECTING: {
-        int16_t counter_value = QuadDec_GetCounter();
-        setup_state.mode.menu.menu_item = counter_value % setup_state.mode.menu.menu_size;
         mode = MODE_MENU_SELECTED;
-        GREEN_ENCODER_LED_OFF();
-        QuadDec_SetCounter(0);
-        setup_state.prev_counter_value = -1;
         break;
     }
     case MODE_KEY_ASSIGNMENT_SETUP:
@@ -317,6 +310,16 @@ void HandleSwitchEvent()
 }
 
 // Utilities //////////////////////////////////////////////////////////////////////////////
+
+int8_t PickUpChangedEncoderValue(uint8_t range)
+{
+    int16_t value = QuadDec_GetCounter();
+    if (value == setup_state.prev_counter_value) {
+        return -1;
+    }
+    setup_state.prev_counter_value = value;
+    return value >= 0 ? value % range : (value + 1) % range + range - 1;
+}
 
 static void RedBlink()
 {
@@ -351,7 +354,8 @@ static void StartSysTimer()
     CySysTickEnable();
 }
 
-void StartRedBlinking() {
+void StartRedBlinking()
+{
     InitSysTimer();
     CySysTickSetCallback(0, RedBlink);
     setup_state.mode.midi.blink_count = 10;
@@ -360,7 +364,8 @@ void StartRedBlinking() {
     StartSysTimer();
 }
 
-void StartFinalization() {
+void StartFinalization()
+{
     InitSysTimer();
     CySysTickSetCallback(0, FinalizationBlink);
     setup_state.mode.midi.blink_count = 10;

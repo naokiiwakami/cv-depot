@@ -17,6 +17,7 @@
 // Firmware runtime modes
 enum ProgramMode {
     MODE_NORMAL = 0,
+    MODE_MENU_INVOKING,
     MODE_MENU_SELECTING,
     MODE_MENU_SELECTED,
     MODE_MIDI_CHANNEL_SETUP,

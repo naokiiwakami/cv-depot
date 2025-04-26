@@ -66,6 +66,7 @@ int main(void)
     
     InitMidiControllers();
 
+    // The main loop ////////////////////////////////////
     for (;;) {
         uint8_t status = UART_Midi_ReadRxStatus();
         if (status & UART_Midi_RX_STS_FIFO_NOTEMPTY) {
