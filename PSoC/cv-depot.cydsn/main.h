@@ -29,17 +29,9 @@ enum ProgramMode {
     MODE_CALIBRATION_BEND_CONFIRMED,
 };
 
-enum Voice {
-    VOICE_1 = 0,
-    VOICE_2,
-};
-
-#define BEND_STEPS 1024
-
-// extern volatile int8_t menu_item;
 extern volatile uint8_t mode;
-extern uint16_t bend_offset;
-extern void Calibrate();
+extern void Calibrate();  // implemented in calibration.c
+extern void Diagnose();   // implemented in diagnosis.c
 
 // macros
 #define GET_GREEN_ENCODER_LED(x) Pin_Encoder_LED_1_Read()

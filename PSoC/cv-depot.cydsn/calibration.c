@@ -15,6 +15,8 @@
 #include "eeprom.h"
 #include "main.h"
 #include "pot_change.h"
+#include "voice.h"
+#include "hardware.h"
 
 /**
  * Find bend width for a octave (i.e., 1V) manually.

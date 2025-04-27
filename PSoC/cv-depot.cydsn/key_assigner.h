@@ -27,8 +27,6 @@ enum KeyAssignmentMode {
     KEY_ASSIGN_END,
 };
 
-extern const char *kKeyAssignmentModeName[KEY_ASSIGN_END];
-
 enum KeyPriority {
     KEY_PRIORITY_LATER = 0,
     KEY_PRIORITY_HIGH,
@@ -60,7 +58,7 @@ typedef struct key_assigner {
 /**
  * Initializes all voices.
  */
-extern void InitializeVoices();
+extern void KeyAssigner_ConnectVoices();
 
 /**
  * Clears a key assigner.

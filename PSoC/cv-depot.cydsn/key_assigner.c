@@ -16,44 +16,9 @@
 #include "project.h"
 
 #include "key_assigner.h"
-
-const char *kKeyAssignmentModeName[KEY_ASSIGN_END] = { "duo", "uni", "par" };
+#include "voice.h"
 
 voice_t all_voices[NUM_VOICES];
-
-#define VELOCITY_DAC_VALUE(velocity) (((velocity) * (velocity)) >> 3)
-#define INDICATOR_VALUE(velocity) ((velocity) >= 64 ? (((velocity) - 63)  * ((velocity) - 63)) / 32 - 1 : 0)
-#define NOTE_PWM_MAX_VALUE 120
-
-#define SetNote1 PWM_Notes_WriteCompare1
-#define SetNote2 PWM_Notes_WriteCompare2
-
-static void Gate1On(uint8_t velocity)
-{
-    DVDAC_Velocity_1_SetValue(VELOCITY_DAC_VALUE(velocity));
-    PWM_Indicators_WriteCompare1(INDICATOR_VALUE(velocity));
-    Pin_Gate_1_Write(1);
-}
-
-static void Gate1Off()
-{
-    Pin_Portament_En_Write(0);
-    DVDAC_Velocity_1_SetValue(0);
-    Pin_Gate_1_Write(0);
-}
-
-static void Gate2On(uint8_t velocity)
-{
-    DVDAC_Velocity_2_SetValue(VELOCITY_DAC_VALUE(velocity));
-    PWM_Indicators_WriteCompare2(INDICATOR_VALUE(velocity));
-    Pin_Gate_2_Write(1);
-}
-
-static void Gate2Off()
-{
-    DVDAC_Velocity_2_SetValue(0);
-    Pin_Gate_2_Write(0);
-}
 
 void VoiceNoteOn(voice_t *voice, uint8_t note_number, uint8_t velocity)
 {
@@ -138,10 +103,14 @@ static void InitializeVoice(voice_t *voice, void (*set_note)(uint8_t), void (*ga
     voice->next_voice = NULL;
 }
 
-void InitializeVoices()
+void KeyAssigner_ConnectVoices()
 {
-    InitializeVoice(&all_voices[0], SetNote1, Gate1On, Gate1Off);
-    InitializeVoice(&all_voices[1], SetNote2, Gate2On, Gate2Off);
+    voice_config_t configs[NUM_VOICES];
+    GetVoiceConfigs(configs, NUM_VOICES);
+    for (uint8_t i = 0; i < NUM_VOICES; ++i) {
+        InitializeVoice(&all_voices[i],
+            configs[i].set_note, configs[i].gate_on, configs[i].gate_off);
+    }
 }
 
 key_assigner_t *InitializeKeyAssigner(key_assigner_t *key_assigner, enum KeyPriority key_priority)
@@ -165,21 +134,6 @@ void AddVoice(key_assigner_t *assigner, voice_t *voice, enum KeyAssignmentMode k
     }
     voice->next_voice = NULL;
 }
-
-#if 0
-void SetUpDuophonic(key_assigner_t *assigner)
-{
-    InitializeVoice(duo_voices[0], SetNote1, Gate1On, Gate1Off);
-    InitializeVoice(duo_voices[1], SetNote2, Gate2On, Gate2Off);
-    InitializeKeyAssigner(assigner, duo_voices, 2);
-}
-
-void SetUpUnison(key_assigner_t *assigner)
-{
-    InitializeVoice(&voices[0], SetBothNotes, BothGateOn, BothGateOff);
-    InitializeKeyAssigner(assigner, duo_voices, 1);
-}
-#endif
 
 void NoteOn(key_assigner_t *assigner, uint8_t note_number, uint8_t velocity)
 {

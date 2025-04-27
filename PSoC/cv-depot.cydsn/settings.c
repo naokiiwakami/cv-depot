@@ -17,6 +17,7 @@
 #include "main.h"
 #include "midi.h"
 #include "eeprom.h"
+#include "voice.h"
 
 typedef struct menu {
     const char *name;
@@ -30,7 +31,6 @@ static void StartFinalization();
 static void InitiateKeyAssignSetup();
 static void InitiateMidiChannelSetup1();
 static void InitiateMidiChannelSetup2();
-static void Diagnose();
 
 // Menu items would change by the configuration. The menu is built on demand by the switch interrupt
 // handler. It should be done quickly, so the menu items are kept in the static space.
@@ -40,6 +40,8 @@ static const menu_t kMenuSetChannel2 = { "ch2", InitiateMidiChannelSetup2 }; // 
 static const menu_t kMenuSetKeyAssignment = { "asn", InitiateKeyAssignSetup };
 static const menu_t kMenuCalibrate = { "cal", Calibrate }; // calibrate the bend center position
 static const menu_t kMenuDiagnose = { "dgn", Diagnose }; // diagnose the hardware
+
+const char *kKeyAssignmentModeName[KEY_ASSIGN_END] = { "duo", "uni", "par" };
 
 // Setup operation states ///////////////////////
 
@@ -122,33 +124,6 @@ void InitiateKeyAssignSetup()
     setup_state.prev_counter_value = -1;
     setup_state.mode.midi.config = *midi_config;
     setup_state.mode.midi.blink_count = 0;
-}
-
-void Diagnose() {
-    Pin_Gate_1_Write(1);
-    Pin_Gate_2_Write(1);
-    const int32_t weight = 1 << 20;
-    for (int32_t counter = 0; counter < 16 * weight; ++counter) {
-        if (counter % weight != 0) {
-            continue;
-        }
-        int8_t value = counter / weight;
-        LED_Driver_Write7SegDigitHex(value, 0);
-        LED_Driver_Write7SegDigitHex(value, 1);
-        LED_Driver_Write7SegDigitHex(value, 2);
-        Pin_Encoder_LED_1_Write(1 - value / 8);
-        Pin_Encoder_LED_2_Write(value / 8);
-        PWM_Indicators_WriteCompare1(value * 8 - 1);
-        PWM_Indicators_WriteCompare2(value * 8 - 1);
-        Pin_Gate_1_Write(1);
-        Pin_Gate_2_Write(1);
-    }
-    Pin_Gate_1_Write(0);
-    Pin_Gate_2_Write(0);
-    Pin_Encoder_LED_1_Write(0);
-    Pin_Encoder_LED_2_Write(0);
-    LED_Driver_ClearDisplayAll();
-    mode = MODE_NORMAL;
 }
 
 // Settings event handlers ///////////////////////////////////////////////////

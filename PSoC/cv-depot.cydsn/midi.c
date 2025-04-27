@@ -17,18 +17,11 @@
 #include "eeprom.h"
 #include "midi.h"
 #include "key_assigner.h"
-#include "pot.h"
-#include "pot_change.h"
 
 /*---------------------------------------------------------*/
 /* The master MIDI config                                  */
 /*---------------------------------------------------------*/
 static midi_config_t midi_config;
-
-/*---------------------------------------------------------*/
-/* Platfor specific                                        */
-/*---------------------------------------------------------*/
-#define MAX_SUPPORTED_MIDI_CHANNELS 2
 
 /*---------------------------------------------------------*/
 /* MIDI constants                                          */
@@ -106,7 +99,7 @@ static uint8_t ReadEepromWithValueCheck(uint16_t address, uint8_t max)
     return value;
 }
 
-void InitMidiControllers()
+void InitializeMidiControllers()
 {
     memset(&midi_config, 0, sizeof(midi_config));  // is memset safe to use?
     
@@ -117,46 +110,7 @@ void InitMidiControllers()
         ReadEepromWithValueCheck(ADDR_KEY_ASSIGNMENT_MODE, KEY_ASSIGN_END);
     midi_config.key_priority =
         ReadEepromWithValueCheck(ADDR_KEY_PRIORITY, KEY_PRIORITY_END);
-
-    // Note CV
-    uint8_t wiper = EEPROM_ReadByte(ADDR_NOTE_1_WIPER);
-    PotChangePlaceRequest(&pot_note_1, -1);  // move to termianl B to ensure the starting position
-    PotChangePlaceRequest(&pot_note_1, wiper);
     
-    wiper = EEPROM_ReadByte(ADDR_NOTE_2_WIPER);
-    PotChangePlaceRequest(&pot_note_2, -1);  // move to termianl B to ensure the starting position
-    PotChangePlaceRequest(&pot_note_2, wiper);
-
-    /*
-    uint8_t temp = EEPROM_ReadByte(ADDR_BEND_OFFSET);
-    if (temp == 0xd1) {
-        temp = EEPROM_ReadByte(ADDR_BEND_OFFSET + 1);
-        bend_offset = temp << 8;
-        temp = EEPROM_ReadByte(ADDR_BEND_OFFSET + 2);
-        bend_offset += temp;
-    } else { // initial value
-        bend_offset = BEND_STEPS / 2;
-    }
-    */
-    // bend_offset = BEND_STEPS / 2;
-    
-    // Gates
-    // Gate1Off();
-    // Gate2Off();
-    
-    // Bend
-    // BendPitch(0x00, PITCH_BEND_CENTER);  // set neutral
-
-    // Portament
-    Pin_Portament_En_Write(0);
-    // move pot terminals to B to ensure the starting positions
-    PotChangePlaceRequest(&pot_portament_1, -1);
-    PotChangePlaceRequest(&pot_portament_2, -1);
-    // then set the pot values
-    PotChangePlaceRequest(&pot_portament_1, 2);
-    PotChangePlaceRequest(&pot_portament_2, 2);
-    
-    InitializeVoices();
     // set A4 to all voices and turn off gates
     for (int i = 0; i < NUM_VOICES; ++i) {
         all_voices[i].gate_off();

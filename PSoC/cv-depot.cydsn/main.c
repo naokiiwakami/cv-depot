@@ -18,6 +18,7 @@
 #include "pot.h"
 #include "pot_change.h"
 #include "settings.h"
+#include "hardware.h"
 
 // Interrupt handler declarations
 CY_ISR_PROTO(SwitchHandler);
@@ -26,16 +27,6 @@ CY_ISR_PROTO(SwitchHandler);
 #define LED_Driver_BRIGHTNESS 70
 
 volatile uint8_t mode = MODE_NORMAL;
-
-uint16_t bend_offset;
-
-#if 0
-
-#define VELOCITY_DAC_VALUE(velocity) (((velocity) * (velocity)) >> 3)
-#define INDICATOR_VALUE(velocity) ((velocity) >= 64 ? (((velocity) - 63)  * ((velocity) - 63)) / 32 - 1 : 0)
-#define NOTE_PWM_MAX_VALUE 120
-
-#endif
 
 int main(void)
 {
@@ -50,21 +41,12 @@ int main(void)
     LED_Driver_SetBrightness(LED_Driver_BRIGHTNESS, 0);
     LED_Driver_SetBrightness(LED_Driver_BRIGHTNESS, 1);
     LED_Driver_SetBrightness(LED_Driver_BRIGHTNESS, 2);
-    Pin_Portament_En_Write(0);
-    Pin_Adj_En_Write(0);
-    Pin_Adj_S0_Write(0);
-    
     isr_SW_StartEx(SwitchHandler);
     QuadDec_Start();
-    PWM_Notes_Start();
-    PWM_Bend_Start();
-    PWM_Indicators_Start();
-    DVDAC_Velocity_1_Start();
-    DVDAC_Velocity_2_Start();
-    DVDAC_Expression_Start();
-    DVDAC_Modulation_Start();
     
-    InitMidiControllers();
+    InitializeVoiceControl();
+    KeyAssigner_ConnectVoices();
+    InitializeMidiControllers();
 
     // The main loop ////////////////////////////////////
     for (;;) {

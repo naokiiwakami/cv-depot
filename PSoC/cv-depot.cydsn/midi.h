@@ -27,7 +27,7 @@ typedef struct midi_config {
     enum KeyPriority key_priority;
 } midi_config_t;
 
-extern void InitMidiControllers();
+extern void InitializeMidiControllers();
 extern void InitializeMidiDecoder();
 
 /**
