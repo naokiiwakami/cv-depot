@@ -14,6 +14,7 @@
 
 #include "project.h"
 
+#include "hardware.h"
 #include "main.h"
 #include "midi.h"
 #include "eeprom.h"
@@ -25,7 +26,6 @@ typedef struct menu {
 } menu_t;
 
 static int8_t PickUpChangedEncoderValue(uint8_t range);
-static void StartRedBlinking();
 static void StartFinalization();
 
 static void InitiateKeyAssignSetup();
@@ -180,7 +180,7 @@ static void ConfirmMidiChannelSetup()
         if (midi_config->channels[VOICE_1] == midi_config->channels[VOICE_2]) {
             // Error, go back to the setup mode
             mode = MODE_MIDI_CHANNEL_SETUP;
-            StartRedBlinking();
+            BlinkRed(100, 10);
             return;
         }
     } else {
@@ -296,15 +296,7 @@ int8_t PickUpChangedEncoderValue(uint8_t range)
     return value >= 0 ? value % range : (value + 1) % range + range - 1;
 }
 
-static void RedBlink()
-{
-    RED_ENCODER_LED_TOGGLE();
-    if (--setup_state.mode.midi.blink_count == 0) {
-        CySysTickStop();
-    }
-}
-
-static void FinalizationBlink()
+static void FinalizationBlinker()
 {
     GREEN_ENCODER_LED_TOGGLE();
     if (--setup_state.mode.midi.blink_count == 0) {
@@ -329,20 +321,10 @@ static void StartSysTimer()
     CySysTickEnable();
 }
 
-void StartRedBlinking()
-{
-    InitSysTimer();
-    CySysTickSetCallback(0, RedBlink);
-    setup_state.mode.midi.blink_count = 10;
-    RED_ENCODER_LED_ON();
-    GREEN_ENCODER_LED_OFF();
-    StartSysTimer();
-}
-
 void StartFinalization()
 {
     InitSysTimer();
-    CySysTickSetCallback(0, FinalizationBlink);
+    CySysTickSetCallback(0, FinalizationBlinker);
     setup_state.mode.midi.blink_count = 10;
     GREEN_ENCODER_LED_ON();
     RED_ENCODER_LED_OFF();

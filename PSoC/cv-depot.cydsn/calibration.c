@@ -101,7 +101,7 @@ void ChangeWiper(pot_t *pot, uint16_t wiper)
 
 struct calib_config {
     enum Voice voice;
-    char *name;
+    uint8_t voice_ram;
     pot_t *pot;
     uint8_t comparator_switch;
     uint16_t save_address;
@@ -125,10 +125,70 @@ void SetUpOctaveMeasurement(struct calib_config *config, uint16_t wiper, uint16_
     SetNote(config->voice, 48);
 }
 
+inline static uint8_t min(uint8_t x, uint8_t y)
+{
+    return x < y ? x : y;
+}
+
+inline static uint8_t max(uint8_t x, uint8_t y)
+{
+    return x > y ? x : y;
+}
+
 void CalibrateNoteCV(struct calib_config *config, uint16_t bend_octave_width)
 {
-    Pin_Encoder_LED_1_Write(0);
-    LED_Driver_WriteString7Seg(config->name, 0);
+    RED_ENCODER_LED_ON();
+
+    LED_Driver_SetDisplayRAM(config->voice_ram, 0);
+    Pin_Adj_S0_Write(config->comparator_switch);
+
+    uint8_t lowest = 0;
+    uint8_t highest = 63;
+    uint8_t midpoint = highest / 2;
+    uint8_t step = 1;
+    uint8_t low = midpoint - step;
+    uint8_t high = midpoint + step;
+    uint8_t wiper;
+    uint8_t reading;
+    do {
+        wiper = (low + high) / 2;
+        SetUpOctaveMeasurement(config, wiper, bend_octave_width);
+        WAIT();
+        reading = Pin_Adjustment_In_Read();
+        Pin_LED_Write(reading);
+        if (reading) {
+            low = wiper + 1;
+            lowest = low;
+            if (low == high && high < highest) {
+                step *= 2;
+                high = min(midpoint + step, highest);
+            }
+        } else {
+            high = wiper -1;
+            highest = high;
+            if (low == high && low > lowest) {
+                step *= 2;
+                low = max(midpoint - step, lowest);
+            }
+        }
+    } while (high - low > 0);
+
+    BlinkGreen(100, 9);
+
+    ChangeWiper(config->pot, low);
+
+    // save the wiper position
+    EEPROM_WriteByte(config->pot->current, config->save_address);
+
+    CyDelay(950);
+}
+
+#if 0
+void CalibrateNoteCV(struct calib_config *config, uint16_t bend_octave_width)
+{
+    RED_ENCODER_LED_ON();
+    
+    LED_Driver_SetDisplayRAM(config->voice_ram, 0);
     Pin_Adj_S0_Write(config->comparator_switch);
     
     uint8_t wiper_lowest = 0;
@@ -142,75 +202,67 @@ void CalibrateNoteCV(struct calib_config *config, uint16_t bend_octave_width)
         reading = Pin_Adjustment_In_Read();
         Pin_LED_Write(reading);
         if (reading) {
-            wiper_lowest = wiper;
+            wiper_lowest = wiper + 1;
         } else {
-            wiper_highest = wiper;
+            wiper_highest = wiper -1;
         }
-    } while (wiper_highest - wiper_lowest > 1);
+    } while (wiper_highest - wiper_lowest > 0);
+        
+    BlinkGreen(100, 5);
     
-    Pin_Encoder_LED_1_Write(1);
-    
-    uint16_t adjusted_bend = BendToReference(-1);
-    int16_t error1 = adjusted_bend - bend_offset + bend_octave_width;
-
-    uint16_t another_wiper = wiper == wiper_highest ? wiper_lowest : wiper_highest;
-    SetUpOctaveMeasurement(config, another_wiper, bend_octave_width);
-    adjusted_bend = BendToReference(-1);
-    int16_t error2 = adjusted_bend - bend_offset + bend_octave_width;
-
-    // compare the error and choose the closer one
-    if (error1 * error1 < error2 * error2) {
-        ChangeWiper(config->pot, wiper);
-    }
+    ChangeWiper(config->pot, wiper_highest);
     
     // save the wiper position
     EEPROM_WriteByte(config->pot->current, config->save_address);
+    
+    CyDelay(950);
 }
+#endif
 
 void Calibrate()
 {
     // turn off portament
     Pin_Portament_En_Write(0);
-    
+
     mode = MODE_CALIBRATION_INIT;
-    Pin_Encoder_LED_2_Write(1);
-    
+    RED_ENCODER_LED_ON();
+
     LED_Driver_WriteString7Seg("___", 0);
     // set note C2
     PWM_Notes_WriteCompare1(12);
     PWM_Notes_WriteCompare2(12);
-    
+
     // move the bender to the center position
     PWM_Bend_WriteCompare(bend_offset);
-    
+
     // Halt while reading current value. User will proceed the mode when ready
     while (mode == MODE_CALIBRATION_INIT) {}
-    
+
     LED_Driver_SetDisplayRAM(1, 0);
     LED_Driver_SetDisplayRAM(1, 1);
     LED_Driver_SetDisplayRAM(1, 2);
-    
+
     // Find the bend width for a octave manually
     uint16_t bend_octave_width = FindBendOctaveWidth();
     Save16(bend_octave_width, ADDR_BEND_OCTAVE_WIDTH);
 
     // Adjust the note CV ranges now
     Pin_Adj_En_Write(1);
-    
+
     // note 1
     struct calib_config config_1 = {
         .voice = VOICE_1,
-        .name = "a",
+        .voice_ram = 0x1 << 5,
         .pot = &pot_note_1,
         .comparator_switch = 0,
         .save_address = ADDR_NOTE_1_WIPER,
     };
     CalibrateNoteCV(&config_1, bend_octave_width);
-    
+
     // note 2
     struct calib_config config_2 = {
         .voice = VOICE_2,
-        .name = "b",
+        .voice_ram = 0x1 << 2,
         .pot = &pot_note_2,
         .comparator_switch = 1,
         .save_address = ADDR_NOTE_2_WIPER,
@@ -223,6 +275,7 @@ void Calibrate()
     Pin_Adj_En_Write(0);
     Pin_Encoder_LED_1_Write(0);
     Pin_Encoder_LED_2_Write(0);
+    LED_Driver_ClearDisplayAll();
 }
 
 /* [] END OF FILE */

@@ -13,6 +13,7 @@
 #include "project.h"
 
 #include "eeprom.h"
+#include "hardware.h"
 #include "pot.h"
 #include "pot_change.h"
 #include "voice.h"
@@ -123,6 +124,59 @@ void InitializeVoiceControl()
     PotChangePlaceRequest(&pot_portament_1, 2);
     PotChangePlaceRequest(&pot_portament_2, 2);
 
+}
+
+static void InitSysTimer(uint16_t interval_ms)
+{
+    CySysTickInit();
+    CySysTickSetClockSource(CY_SYS_SYST_CSR_CLK_SRC_LFCLK);
+    CySysTickSetReload(100000 / 1000 * interval_ms);
+    CySysTickDisableInterrupt();
+    CySysTickEnableInterrupt();
+}
+
+static void StartSysTimer()
+{
+    CySysTickClear();
+    CySysTickEnable();
+}
+
+static uint16_t blink_count = 0;
+
+static void GreenBlinker()
+{
+    GREEN_ENCODER_LED_TOGGLE();
+    if (--blink_count == 0) {
+        CySysTickStop();
+    }
+}
+
+static void RedBlinker()
+{
+    RED_ENCODER_LED_TOGGLE();
+    if (--blink_count == 0) {
+        CySysTickStop();
+    }
+}
+
+void BlinkGreen(uint16_t interval_ms, uint16_t times)
+{
+    InitSysTimer(interval_ms);
+    CySysTickSetCallback(0, GreenBlinker);
+    blink_count = times;
+    GREEN_ENCODER_LED_ON();
+    RED_ENCODER_LED_OFF();
+    StartSysTimer();
+}
+
+void BlinkRed(uint16_t interval_ms, uint16_t times)
+{
+    InitSysTimer(interval_ms);
+    CySysTickSetCallback(0, RedBlinker);
+    blink_count = times;
+    RED_ENCODER_LED_ON();
+    GREEN_ENCODER_LED_OFF();
+    StartSysTimer();
 }
 
 /* [] END OF FILE */
