@@ -26,7 +26,8 @@
 #define ADDR_KEY_ASSIGNMENT_MODE 0xa
 #define ADDR_KEY_PRIORITY 0xb
 
-extern cystatus Save16(uint16_t data, uint16_t address);
-extern uint16_t Load16(uint16_t address);
+extern uint8_t ReadEepromWithValueCheck(uint16 address, uint8_t max);
+extern cystatus Save16(uint16 data, uint16_t address);
+extern uint16_t Load16(uint16 address);
     
 /* [] END OF FILE */

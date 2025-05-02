@@ -14,8 +14,16 @@
 
 #include "eeprom.h"
 
-#if 1
-cystatus Save16(uint16_t data, uint16_t address)
+uint8_t ReadEepromWithValueCheck(uint16 address, uint8_t max)
+{
+    uint8_t value = EEPROM_ReadByte(address);
+    if (value >= max) {
+        return 0;
+    }
+    return value;
+}
+
+cystatus Save16(uint16 data, uint16_t address)
 {
     cystatus ret;
     // big endian
@@ -26,7 +34,7 @@ cystatus Save16(uint16_t data, uint16_t address)
     return EEPROM_WriteByte(data & 0xff, address + 1);
 }
 
-uint16_t Load16(uint16_t address)
+uint16_t Load16(uint16 address)
 {
     uint16_t temp;
     temp = EEPROM_ReadByte(address);
@@ -35,6 +43,5 @@ uint16_t Load16(uint16_t address)
     result += temp;
     return result;
 }
-#endif
 
 /* [] END OF FILE */

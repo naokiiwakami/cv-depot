@@ -90,15 +90,6 @@ static key_assigner_t *key_assigners[NUM_MIDI_CHANNELS];
 
 static void HandleMidiChannelMessage();
 
-static uint8_t ReadEepromWithValueCheck(uint16_t address, uint8_t max)
-{
-    uint8_t value = EEPROM_ReadByte(address);
-    if (value >= max) {
-        return 0;
-    }
-    return value;
-}
-
 void InitializeMidiControllers()
 {
     memset(&midi_config, 0, sizeof(midi_config));  // is memset safe to use?
@@ -106,8 +97,7 @@ void InitializeMidiControllers()
     // Set Basic MIDI channels
     midi_config.channels[0] = ReadEepromWithValueCheck(ADDR_MIDI_CH_1, 16);
     midi_config.channels[1] = ReadEepromWithValueCheck(ADDR_MIDI_CH_2, 16);
-    midi_config.key_assignment_mode =
-        ReadEepromWithValueCheck(ADDR_KEY_ASSIGNMENT_MODE, KEY_ASSIGN_END);
+    midi_config.key_assignment_mode = ReadEepromWithValueCheck(ADDR_KEY_ASSIGNMENT_MODE, KEY_ASSIGN_END);
     midi_config.key_priority =
         ReadEepromWithValueCheck(ADDR_KEY_PRIORITY, KEY_PRIORITY_END);
     
@@ -154,7 +144,7 @@ void CommitMidiConfigChange(const midi_config_t *new_config)
     EEPROM_UpdateTemperature();
     for (int voice = 0; voice < NUM_VOICES; ++voice) {
         if (new_config->channels[voice] != midi_config.channels[voice]) {
-            EEPROM_WriteByte(new_config->channels[0], ADDR_MIDI_CH_1 + voice);
+            EEPROM_WriteByte(new_config->channels[voice], ADDR_MIDI_CH_1 + voice);
         }
     }
     if (new_config->key_assignment_mode != midi_config.key_assignment_mode) {

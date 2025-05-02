@@ -24,13 +24,22 @@ uint16_t bend_offset;
 #define SetNote1 PWM_Notes_WriteCompare1
 #define SetNote2 PWM_Notes_WriteCompare2
 
-#define VELOCITY_DAC_VALUE(velocity) (((velocity) * (velocity)) >> 3)
+// TODO: Make this value adjustable
+#define GATE_ON_POINT 680
+// #define GATE_ON_POINT 639
+#define GATE_DAC_STEPS 2040
+#define FIXED_POINT_BITSHIFT 18
+#define MAX_VELOCITY 127
+#define VELOCITY_FACTOR \
+    (uint32_t) (((GATE_DAC_STEPS - GATE_ON_POINT) << FIXED_POINT_BITSHIFT) / MAX_VELOCITY / MAX_VELOCITY)
+#define VELOCITY_DAC_VALUE(velocity) ((((velocity) * (velocity) * (VELOCITY_FACTOR)) >> FIXED_POINT_BITSHIFT) + GATE_ON_POINT)
 #define INDICATOR_VALUE(velocity) ((velocity) >= 64 ? (((velocity) - 63)  * ((velocity) - 63)) / 32 - 1 : 0)
 #define NOTE_PWM_MAX_VALUE 120
 
 static void Gate1On(uint8_t velocity)
 {
-    DVDAC_Velocity_1_SetValue(VELOCITY_DAC_VALUE(velocity));
+    uint16_t gate_level = VELOCITY_DAC_VALUE(velocity);
+    DVDAC_Velocity_1_SetValue(gate_level);
     PWM_Indicators_WriteCompare1(INDICATOR_VALUE(velocity));
     Pin_Gate_1_Write(1);
 }
