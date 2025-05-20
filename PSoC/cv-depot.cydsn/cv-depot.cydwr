@@ -58,7 +58,7 @@
         <Data key="derive_type" value="AUTO" />
         <Data key="desired_freq" value="250" />
         <Data key="desired_unit" value="3" />
-        <Data key="divider" value="96" />
+        <Data key="divider" value="192" />
         <Data key="domain" value="DIGITAL" />
         <Data key="enabled" value="True" />
         <Data key="minus_accuracy" value="0" />
@@ -81,7 +81,7 @@
         <Data key="derive_type" value="AUTO" />
         <Data key="desired_freq" value="250000" />
         <Data key="desired_unit" value="0" />
-        <Data key="divider" value="96" />
+        <Data key="divider" value="192" />
         <Data key="domain" value="DIGITAL" />
         <Data key="enabled" value="True" />
         <Data key="minus_accuracy" value="0" />
@@ -152,7 +152,7 @@
         <Data key="derive_type" value="AUTO" />
         <Data key="desired_freq" value="192000" />
         <Data key="desired_unit" value="0" />
-        <Data key="divider" value="125" />
+        <Data key="divider" value="250" />
         <Data key="domain" value="DIGITAL" />
         <Data key="enabled" value="True" />
         <Data key="minus_accuracy" value="0" />
@@ -199,7 +199,7 @@
         <Data key="derive_type" value="AUTO" />
         <Data key="desired_freq" value="1" />
         <Data key="desired_unit" value="3" />
-        <Data key="divider" value="24000" />
+        <Data key="divider" value="48000" />
         <Data key="domain" value="DIGITAL" />
         <Data key="enabled" value="True" />
         <Data key="minus_accuracy" value="0" />
@@ -222,7 +222,7 @@
         <Data key="derive_type" value="AUTO" />
         <Data key="desired_freq" value="250000" />
         <Data key="desired_unit" value="0" />
-        <Data key="divider" value="96" />
+        <Data key="divider" value="192" />
         <Data key="domain" value="DIGITAL" />
         <Data key="enabled" value="True" />
         <Data key="minus_accuracy" value="0" />
@@ -269,7 +269,7 @@
         <Data key="derive_type" value="AUTO" />
         <Data key="desired_freq" value="250000" />
         <Data key="desired_unit" value="0" />
-        <Data key="divider" value="96" />
+        <Data key="divider" value="192" />
         <Data key="domain" value="DIGITAL" />
         <Data key="enabled" value="True" />
         <Data key="minus_accuracy" value="0" />
@@ -316,7 +316,7 @@
         <Data key="derive_type" value="AUTO" />
         <Data key="desired_freq" value="250000" />
         <Data key="desired_unit" value="0" />
-        <Data key="divider" value="96" />
+        <Data key="divider" value="192" />
         <Data key="domain" value="DIGITAL" />
         <Data key="enabled" value="True" />
         <Data key="minus_accuracy" value="0" />
@@ -387,7 +387,7 @@
         <Data key="check_tolerance" value="True" />
         <Data key="clock_version" value="v1" />
         <Data key="derive_type" value="BUILTIN" />
-        <Data key="desired_freq" value="24" />
+        <Data key="desired_freq" value="48" />
         <Data key="desired_unit" value="6" />
         <Data key="divider" value="0" />
         <Data key="domain" value="0" />
@@ -474,7 +474,7 @@
         <Data key="desired_freq" value="0" />
         <Data key="desired_unit" value="0" />
         <Data key="divider" value="1" />
-        <Data key="domain" value="DIGITAL" />
+        <Data key="domain" value="0" />
         <Data key="enabled" value="True" />
         <Data key="master_divider_used" value="True" />
         <Data key="minus_accuracy" value="0" />
