@@ -15,6 +15,7 @@
 
 #include "project.h"
 
+#include "analog3.h"
 #include "key_assigner.h"
 #include "voice.h"
 
@@ -33,9 +34,15 @@ void VoiceNoteOn(voice_t *voice, uint8_t note_number, uint8_t velocity)
     voice->notes[0] = note_number;
     
     // Update the hardware
+    CAN_DATA_BYTES_MSG data;
     for (voice_t *current = voice; current != NULL; current = current->next_voice) {
         current->set_note(note_number);
         current->gate_on(velocity);
+        data.byte[0] = A3_VOICE_MSG_SET_NOTE;
+        data.byte[1] = note_number;
+        data.byte[2] = A3_VOICE_MSG_GATE_ON;
+        data.byte[3] = velocity;
+        A3SendDataStandard(A3_ID_MIDI_VOICE_BASE + current->id, 4, &data);
     }
     // LED_Driver_PutChar7Seg('N', 0);
     // LED_Driver_Write7SegNumberHex(note_number, 1, 2, LED_Driver_RIGHT_ALIGN);
@@ -74,23 +81,29 @@ void VoiceNoteOff(voice_t *voice, uint8_t note_number)
     }
 
     // update the hardware
+    CAN_DATA_BYTES_MSG data;
     if (voice->num_notes == 0) {
         voice->gate = 0;
         for (voice_t *current = voice; current != NULL; current = current->next_voice) {
             current->gate_off();
+            data.byte[0] = A3_VOICE_MSG_GATE_OFF;
+            A3SendDataStandard(A3_ID_MIDI_VOICE_BASE + current->id, 1, &data);
         }
-        // LED_Driver_PutChar7Seg('F', 0);
-        // LED_Driver_Write7SegNumberHex(note_number, 1, 2, LED_Driver_RIGHT_ALIGN);
     } else {
         for (voice_t *current = voice; current != NULL; current = current->next_voice) {
             current->set_note(voice->notes[0]);
+            data.byte[0] = A3_VOICE_MSG_SET_NOTE;
+            data.byte[1] = voice->notes[0];
+            A3SendDataStandard(A3_ID_MIDI_VOICE_BASE + current->id, 2, &data);
         }
         // retrigger?
     }
 }
 
-static void InitializeVoice(voice_t *voice, void (*set_note)(uint8_t), void (*gate_on)(uint8_t), void (*gate_off)())
+static void InitializeVoice(voice_t *voice, uint8_t id,
+    void (*set_note)(uint8_t), void (*gate_on)(uint8_t), void (*gate_off)())
 {
+    voice->id = id;
     voice->num_notes = 0;
     voice->velocity = 0;
     voice->gate = 0;
@@ -108,7 +121,7 @@ void KeyAssigner_ConnectVoices()
     voice_config_t configs[NUM_VOICES];
     GetVoiceConfigs(configs, NUM_VOICES);
     for (uint8_t i = 0; i < NUM_VOICES; ++i) {
-        InitializeVoice(&all_voices[i],
+        InitializeVoice(&all_voices[i], i,
             configs[i].set_note, configs[i].gate_on, configs[i].gate_off);
     }
 }
@@ -150,6 +163,7 @@ void NoteOn(key_assigner_t *assigner, uint8_t note_number, uint8_t velocity)
         }
     }
 
+    // Find an available voice
     for (int i = 0; i < assigner->num_voices; ++i) {
         int index = (assigner->index_next_voice + i) % assigner->num_voices;
         voice_t *voice = assigner->voices[index];
@@ -159,6 +173,8 @@ void NoteOn(key_assigner_t *assigner, uint8_t note_number, uint8_t velocity)
             return;
         }
     }
+
+    // All voices are occupied, replace the oldest voice
     voice_t *next_voice = assigner->voices[assigner->index_next_voice];
     assigner->index_next_voice = (assigner->index_next_voice + 1) % assigner->num_voices;
     VoiceNoteOn(next_voice, note_number, velocity);

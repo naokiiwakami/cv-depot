@@ -51,7 +51,7 @@ static midi_config_t midi_config;
 #define CC_MONO_MODE_ON          0x7E
 #define CC_POLY_MODE_ON          0x7F
 
-/* MIDI System Messages */
+/* MIDI System Common Messages */
 #define SYSEX_IN  0xF0
 #define SYSEX_OUT 0xF7
 

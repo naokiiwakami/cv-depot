@@ -35,6 +35,7 @@ enum KeyPriority {
 };
 
 typedef struct voice {
+    uint8_t id;
     uint8_t notes[MAX_NOTES];
     int num_notes;
     uint8_t velocity;

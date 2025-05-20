@@ -30,12 +30,11 @@ volatile uint8_t mode = MODE_NORMAL;
 
 int main(void)
 {
-    CyGlobalIntEnable; /* Enable global interrupts. */
-
     // Initialization ////////////////////////////////////
     EEPROM_Start();
     PotGlobalInit();
     
+    CAN_Start();
     UART_Midi_Start();
     LED_Driver_Start();
     LED_Driver_SetBrightness(LED_Driver_BRIGHTNESS, 0);
@@ -47,6 +46,8 @@ int main(void)
     InitializeVoiceControl();
     KeyAssigner_ConnectVoices();
     InitializeMidiControllers();
+
+    CyGlobalIntEnable; /* Enable global interrupts. */
 
     // The main loop ////////////////////////////////////
     for (;;) {
