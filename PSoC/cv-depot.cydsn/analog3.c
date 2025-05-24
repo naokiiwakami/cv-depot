@@ -27,4 +27,17 @@ void A3SendDataStandard(uint32_t id, uint8_t dlc, CAN_DATA_BYTES_MSG *data)
     CAN_SendMsg(&message);
 }
 
+void A3SendDataExtended(uint32_t id, uint8_t dlc, CAN_DATA_BYTES_MSG *data)
+{
+    CAN_TX_MSG message = {
+        .id = id,
+        .rtr = 0,
+        .ide = 1,
+        .dlc = dlc,
+        .irq = 0,
+        .msg = data,
+    };
+    CAN_SendMsg(&message);
+}
+
 /* [] END OF FILE */
