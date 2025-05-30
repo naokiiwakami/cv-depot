@@ -20,7 +20,7 @@
 #define A3_ID_MIDI_REAL_TIME    0x140
 
 #define A3_ID_MISSION_CONTROL        0x700
-#define A3_ID_INDIVIDUAL_MODULE_BASE 0x700
+#define A3_ID_IM_BASE                0x700
 
 // Message types //////////////////////////////////
 
@@ -36,16 +36,31 @@
 #define A3_VOICE_MSG_CHANNEL_PRESSURE  0x0D
 #define A3_VOICE_MSG_PITCH_BEND        0x0E
 
-/* Module administration messages */
-#define A3_ADMIN_REQUEST_ID 0x00
+/* Module administration opcodes */
+#define A3_ADMIN_SIGN_IN 0x01
+#define A3_ADMIN_NOTIFY_ID 0x02
 
 /* Mission control opcodes */
-#define A3_MC_REGISTRATION_CHECK_REPLY 0x00
-#define A3_MC_ASSIGN_MODULE_ID 0x01
-#define A3_MC_PING 0x02
+#define A3_MC_SIGN_IN 0x01
+#define A3_MC_ASSIGN_MODULE_ID 0x02
+#define A3_MC_PING 0x03
+#define A3_MC_GET_CONFIG_REQUEST 0x04
+
+/* Individual module opcodes */
+#define A3_IM_PING_REPLY 0x01
+#define A3_IM_GET_CONFIG_REPLY 0x02
 
 #define A3_DATA_LENGTH 8
 
+extern uint32_t a3_module_uid;
+extern uint16_t a3_module_id;
+
+extern void InitializeA3Module();
+extern void SignIn();
+extern void HandleMissionControlMessage(void *arg);
+
+// low-level A3 message exchange method.
+// TODO: Bring these details into analog3.c
 extern void A3SendDataStandard(uint32_t id, uint8_t dlc, CAN_DATA_BYTES_MSG *data);
 extern void A3SendDataExtended(uint32_t id, uint8_t dlc, CAN_DATA_BYTES_MSG *data);
 

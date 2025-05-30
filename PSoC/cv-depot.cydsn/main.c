@@ -9,7 +9,7 @@
  *
  * ========================================
 */
-#include <stdlib.h>
+#include <malloc.h>
 
 #include "project.h"
 
@@ -30,29 +30,56 @@ CY_ISR_PROTO(SwitchHandler);
 #define LED_Driver_BRIGHTNESS 70
 
 volatile uint8_t mode = MODE_NORMAL;
-uint32_t module_uid;
-uint16_t module_id = 0xffff;
-volatile uint8_t has_control_center_message = 0;
 
-static void InitializeModule()
+// Task management
+#define MAX_TASKS 8
+task_t pending_tasks[MAX_TASKS];
+volatile uint8_t task_first;
+volatile uint8_t task_last;
+volatile uint8_t tasks_overflow;
+
+static void ClearTasks()
 {
-    module_uid = Load32(ADDR_MODULE_UID);
-    if (module_uid == 0) {
-        module_uid = rand() & 0x1fffffff;
-        Save32(module_uid, ADDR_MODULE_UID);
+    task_first = 0;
+    task_last = 0;
+    tasks_overflow = 0;
+}
+
+void ScheduleTask(task_t task)
+{
+    if (tasks_overflow) {
+        // no way to notify, silently ignore
+        if (task.arg != NULL) {
+            free(task.arg);
+        }
+        return;
+    }
+    pending_tasks[task_last] = task;
+    task_last = (task_last + 1) % MAX_TASKS;
+    if (task_last == task_first) {
+        tasks_overflow = 1;
     }
 }
 
-static void RequestForId()
+void ConsumeTask()
 {
-    CAN_DATA_BYTES_MSG data;
-    data.byte[0] = A3_ADMIN_REQUEST_ID;
-    A3SendDataExtended(module_uid, 1, &data);
+    CyGlobalIntDisable;  // enter critical section
+    if (task_last == task_first && !tasks_overflow) {
+        // nothing to pick up
+        CyGlobalIntEnable; // exit critical section
+        return;
+    }
+    task_t task = pending_tasks[task_first];
+    task_first = (task_first + 1) % MAX_TASKS;
+    tasks_overflow = 0;
+    CyGlobalIntEnable; // exit critical section
+    task.run(task.arg);
 }
 
 int main(void)
 {
     // Initialization ////////////////////////////////////
+    ClearTasks();
     EEPROM_Start();
     PotGlobalInit();
     
@@ -65,7 +92,7 @@ int main(void)
     isr_SW_StartEx(SwitchHandler);
     QuadDec_Start();
     
-    InitializeModule();
+    InitializeA3Module();
     InitializeVoiceControl();
     KeyAssigner_ConnectVoices();
     InitializeMidiControllers();
@@ -73,26 +100,8 @@ int main(void)
     CyGlobalIntEnable; /* Enable global interrupts. */
     
     Pin_LED_Write(1);
-    RequestForId();
+    SignIn();
     
-    // TODO: set timeout
-    while (module_id > 0x7ff) {
-        while (!has_control_center_message) {}
-        has_control_center_message = 0;
-        uint8_t opcode = CAN_RX_DATA_BYTE(0, 0);
-        if (opcode == A3_MC_ASSIGN_MODULE_ID) {
-            uint32_t target_module
-                = CAN_RX_DATA_BYTE(0, 1) << 24
-                | CAN_RX_DATA_BYTE(0, 2) << 16
-                | CAN_RX_DATA_BYTE(0, 3) << 8
-                | CAN_RX_DATA_BYTE(0, 4);
-            if (target_module == module_uid) {
-                module_id = A3_ID_INDIVIDUAL_MODULE_BASE + CAN_RX_DATA_BYTE(0, 5);
-            }
-        }
-    }
-    Pin_LED_Write(0);
-
     // The main loop ////////////////////////////////////
     for (;;) {
         uint8_t status = UART_Midi_ReadRxStatus();
@@ -105,6 +114,9 @@ int main(void)
         }        
         // Consume pot change requests if not empty
         PotChangeHandleRequests();
+        
+        // Consume task if any, one at a time
+        ConsumeTask();
     }
 }
 
@@ -124,7 +136,11 @@ void CAN_MsgRXIsr_Callback()
 
 void CAN_ReceiveMsg_0_Callback()
 {
-    has_control_center_message = 1;
+    task_t task = {
+        .run = HandleMissionControlMessage,
+        .arg = NULL,
+    };
+    ScheduleTask(task);
 }
 
 /* [] END OF FILE */

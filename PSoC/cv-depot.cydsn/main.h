@@ -33,4 +33,12 @@ extern volatile uint8_t mode;
 extern void Calibrate();  // implemented in calibration.c
 extern void Diagnose();   // implemented in diagnosis.c
 
+// Task management
+typedef struct task {
+    void (*run)(void *);
+    void *arg;
+} task_t;
+
+extern void ScheduleTask(task_t task);
+
 /* [] END OF FILE */
