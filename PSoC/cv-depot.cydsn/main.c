@@ -10,6 +10,7 @@
  * ========================================
 */
 #include <malloc.h>
+#include <stdlib.h>
 
 #include "project.h"
 
@@ -143,4 +144,12 @@ void CAN_ReceiveMsg_0_Callback()
     ScheduleTask(task);
 }
 
+void CAN_ReceiveMsg_Callback()
+{
+    task_t task = {
+        .run = HandleGeneralMessage,
+        .arg = NULL,
+    };
+    ScheduleTask(task);
+}
 /* [] END OF FILE */

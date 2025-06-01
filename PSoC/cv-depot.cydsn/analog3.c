@@ -15,6 +15,7 @@
 
 #include "analog3.h"
 #include "eeprom.h"
+#include "hardware.h"
 
 #define A3_ID_UNASSIGNED 0
 
@@ -57,6 +58,14 @@ void InitializeA3Module()
     a3_module_id = A3_ID_UNASSIGNED;
 }
 
+static void CancelUid()
+{
+    a3_module_uid = rand() & 0x1fffffff;
+    Save32(a3_module_uid, ADDR_MODULE_UID);
+    a3_module_id = A3_ID_UNASSIGNED;
+    SignIn();
+}
+
 void SignIn()
 {
     CAN_DATA_BYTES_MSG data;
@@ -70,7 +79,13 @@ static void NotifyId()
     data.byte[0] = A3_ADMIN_NOTIFY_ID;
     data.byte[1] = a3_module_id - A3_ID_IM_BASE;
     A3SendDataExtended(a3_module_uid, 2, &data);
+}
 
+static void RequestUidCancel(uint32_t id)
+{
+    CAN_DATA_BYTES_MSG data;
+    data.byte[0] = A3_ADMIN_REQ_UID_CANCEL;
+    A3SendDataExtended(id, 1, &data);
 }
 
 void HandleMissionControlMessage(void* arg)
@@ -102,12 +117,42 @@ void HandleMissionControlMessage(void* arg)
         if (target_module == a3_module_id) {
             uint8_t stream_id = CAN_RX_DATA_BYTE(0, 2);
             CAN_DATA_BYTES_MSG data;
-            data.byte[0] = A3_IM_PING_REPLY;
+            data.byte[0] = A3_IM_REPLY_PING;
             data.byte[1] = stream_id;
             A3SendDataStandard(a3_module_id, 2, &data);
+            if (CAN_GET_DLC(0) >= 4 && CAN_RX_DATA_BYTE(0, 3)) {
+                BlinkGreen(70, 3);
+            }
         }
         break;
     }
+    }
+}
+
+void HandleGeneralMessage(void *arg)
+{
+    (void)arg;
+    uint8_t is_extended = CAN_GET_RX_IDE(1);
+    if (!is_extended) {
+        // no jobs yet in the standard ID space
+        return;
+    }
+    uint32_t id = CAN_GET_RX_ID(1);
+    if (id != a3_module_uid) {
+        // it's not about me
+        return;
+    }
+    uint8_t opcode = CAN_RX_DATA_BYTE(1, 0);
+    switch (opcode) {
+    case A3_ADMIN_SIGN_IN:
+    case A3_ADMIN_NOTIFY_ID:
+        RequestUidCancel(id);
+        // cancel mine, too
+        CancelUid();
+        break;
+    case  A3_ADMIN_REQ_UID_CANCEL:
+        CancelUid();
+        break;
     }
 }
 

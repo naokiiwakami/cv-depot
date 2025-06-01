@@ -19,6 +19,8 @@
     // extern void CAN_MsgRXIsr_Callback();
     #define CAN_RECEIVE_MSG_0_CALLBACK
     extern void CAN_ReceiveMsg_0_Callback();
+    #define CAN_RECEIVE_MSG_CALLBACK
+    extern void CAN_ReceiveMsg_Callback();
 
 #endif /* CYAPICALLBACKS_H */   
 /* [] */

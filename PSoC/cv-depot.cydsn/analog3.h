@@ -39,16 +39,17 @@
 /* Module administration opcodes */
 #define A3_ADMIN_SIGN_IN 0x01
 #define A3_ADMIN_NOTIFY_ID 0x02
+#define A3_ADMIN_REQ_UID_CANCEL 0x03
 
 /* Mission control opcodes */
 #define A3_MC_SIGN_IN 0x01
 #define A3_MC_ASSIGN_MODULE_ID 0x02
 #define A3_MC_PING 0x03
-#define A3_MC_GET_CONFIG_REQUEST 0x04
+#define A3_MC_REQUEST_NAME 0x04
 
 /* Individual module opcodes */
-#define A3_IM_PING_REPLY 0x01
-#define A3_IM_GET_CONFIG_REPLY 0x02
+#define A3_IM_REPLY_PING 0x01
+#define A3_IM_REPLY_NAME 0x02
 
 #define A3_DATA_LENGTH 8
 
@@ -58,6 +59,7 @@ extern uint16_t a3_module_id;
 extern void InitializeA3Module();
 extern void SignIn();
 extern void HandleMissionControlMessage(void *arg);
+extern void HandleGeneralMessage(void *arg);
 
 // low-level A3 message exchange method.
 // TODO: Bring these details into analog3.c
