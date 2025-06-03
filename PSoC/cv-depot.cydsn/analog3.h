@@ -46,10 +46,14 @@
 #define A3_MC_ASSIGN_MODULE_ID 0x02
 #define A3_MC_PING 0x03
 #define A3_MC_REQUEST_NAME 0x04
+#define A3_MC_CONTINUE_NAME 0x05
 
 /* Individual module opcodes */
-#define A3_IM_REPLY_PING 0x01
-#define A3_IM_REPLY_NAME 0x02
+#define A3_IM_PING_REPLY 0x01
+#define A3_IM_NAME_REPLY 0x02
+
+/* Attribute IDs */
+#define A3_ATTR_NAME 0x1
 
 #define A3_DATA_LENGTH 8
 

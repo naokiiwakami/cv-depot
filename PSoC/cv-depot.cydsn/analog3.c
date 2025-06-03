@@ -88,6 +88,38 @@ static void RequestUidCancel(uint32_t id)
     A3SendDataExtended(id, 1, &data);
 }
 
+static const char *module_name = "cv-depot; a long time ago in a galaxy far, far away...";
+static int data_position = 0;
+
+static void HandleRequestName()
+{
+    data_position = 0;
+    int payload_index = 0;
+    CAN_DATA_BYTES_MSG data;
+    data.byte[payload_index++] = A3_IM_NAME_REPLY;
+    data.byte[payload_index++] = A3_ATTR_NAME;
+    uint8_t name_length = strlen(module_name);
+    data.byte[payload_index++] = name_length;
+    for (; payload_index < A3_DATA_LENGTH && data_position < name_length; ++payload_index, ++data_position) {
+        data.byte[payload_index] = module_name[data_position];
+    }
+    CyDelay(10);
+    A3SendDataStandard(a3_module_id, payload_index, &data);
+}
+
+static void HandleContinueName()
+{
+    int payload_index = 0;
+    CAN_DATA_BYTES_MSG data;
+    data.byte[payload_index++] = A3_IM_NAME_REPLY;
+    uint8_t name_length = strlen(module_name);
+    for (; payload_index < A3_DATA_LENGTH && data_position < name_length; ++payload_index, ++data_position) {
+        data.byte[payload_index] = module_name[data_position];
+    }
+    CyDelay(10);
+    A3SendDataStandard(a3_module_id, payload_index, &data);
+}
+
 void HandleMissionControlMessage(void* arg)
 {
     (void)arg;
@@ -115,14 +147,26 @@ void HandleMissionControlMessage(void* arg)
     case A3_MC_PING: {
         uint16_t target_module = CAN_RX_DATA_BYTE(0, 1) + A3_ID_IM_BASE;
         if (target_module == a3_module_id) {
-            uint8_t stream_id = CAN_RX_DATA_BYTE(0, 2);
             CAN_DATA_BYTES_MSG data;
-            data.byte[0] = A3_IM_REPLY_PING;
-            data.byte[1] = stream_id;
-            A3SendDataStandard(a3_module_id, 2, &data);
-            if (CAN_GET_DLC(0) >= 4 && CAN_RX_DATA_BYTE(0, 3)) {
+            data.byte[0] = A3_IM_PING_REPLY;
+            A3SendDataStandard(a3_module_id, 1, &data);
+            if (CAN_GET_DLC(0) >= 3 && CAN_RX_DATA_BYTE(0, 2)) {
                 BlinkGreen(70, 3);
             }
+        }
+        break;
+    }
+    case A3_MC_REQUEST_NAME: {
+        uint16_t target_module = CAN_RX_DATA_BYTE(0, 1) + A3_ID_IM_BASE;
+        if (target_module == a3_module_id) {
+            HandleRequestName();
+        }
+        break;
+    }
+    case A3_MC_CONTINUE_NAME: {
+        uint16_t target_module = CAN_RX_DATA_BYTE(0, 1) + A3_ID_IM_BASE;
+        if (target_module == a3_module_id) {
+            HandleContinueName();
         }
         break;
     }
