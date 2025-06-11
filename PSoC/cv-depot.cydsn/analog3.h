@@ -47,15 +47,51 @@
 #define A3_MC_PING 0x03
 #define A3_MC_REQUEST_NAME 0x04
 #define A3_MC_CONTINUE_NAME 0x05
+#define A3_MC_REQUEST_CONFIG 0x06
+#define A3_MC_CONTINUE_CONFIG 0x07
 
 /* Individual module opcodes */
 #define A3_IM_PING_REPLY 0x01
 #define A3_IM_NAME_REPLY 0x02
+#define A3_IM_CONFIG_REPLY 0x03
 
 /* Attribute IDs */
 #define A3_ATTR_NAME 0x1
 
 #define A3_DATA_LENGTH 8
+
+enum A3PropertyValueType {
+    A3_U8,
+    // A3_U16,
+    A3_U32,
+    // A3_I8,
+    // A3_I16,
+    // A3_I32,
+    A3_STRING,
+    A3_VECTOR_U8
+};
+
+typedef struct A3Vector {
+    uint8_t size;
+    void *data;
+} a3_vector_t;
+
+/**
+ * Least set of parameters necessary for sharing config with the Mission Control.
+ */
+typedef struct A3ModuleProperty {
+    uint8_t id;  // attribute ID
+    uint8_t value_type; // value type
+    void *data;
+} a3_module_property_t;
+
+// Properties that are common among modules
+#define PROP_MODULE_UID 0
+#define TYPE_MODULE_UID A3_U32
+#define PROP_MODULE_TYPE 1
+#define TYPE_MODULE_TYPE A3_U8
+#define PROP_MODULE_NAME 2
+#define TYPE_MODULE_NAME A3_STRING
 
 extern uint32_t a3_module_uid;
 extern uint16_t a3_module_id;
