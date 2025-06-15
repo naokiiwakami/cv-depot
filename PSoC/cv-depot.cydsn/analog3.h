@@ -15,6 +15,7 @@
 #include "project.h"
 
 // ID assignments /////////////////////////////////
+#define A3_ID_UNASSIGNED          0x0
 #define A3_ID_MIDI_TIMING_CLOCK 0x100
 #define A3_ID_MIDI_VOICE_BASE   0x101
 #define A3_ID_MIDI_REAL_TIME    0x140
@@ -23,6 +24,8 @@
 
 #define A3_ID_MISSION_CONTROL   0x700
 #define A3_ID_IM_BASE           0x700
+
+#define A3_ID_INVALID      0xffffffff
 
 // Message types //////////////////////////////////
 
@@ -54,11 +57,6 @@
 
 /* Individual module opcodes */
 #define A3_IM_PING_REPLY 0x01
-#define A3_IM_NAME_REPLY 0x02
-#define A3_IM_CONFIG_REPLY 0x03
-
-/* Attribute IDs */
-#define A3_ATTR_NAME 0x1
 
 #define A3_DATA_LENGTH 8
 

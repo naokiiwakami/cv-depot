@@ -20,21 +20,16 @@
 #include "key_assigner.h"
 #include "midi.h"
 
-#define A3_ID_UNASSIGNED 0
+// module properties //////////////////////////////////////////////////
 
-// module identifiers
+// identifiers
 uint32_t a3_module_uid;
 uint16_t a3_module_id;
 
 static uint8_t a3_module_type = MODULE_TYPE;
 static uint8_t num_voices = NUM_VOICES;
 
-// communication states
 static char module_name[64];
-static int prop_position = 0;
-static int data_position = 0;
-
-static uint32_t wire_id = 0;
 
 static a3_vector_t channels = {
     .size = NUM_VOICES,
@@ -73,6 +68,8 @@ static a3_module_property_t config[NUM_PROPS] = {
     }, 
 };
 
+// CAN tx/rx methods /////////////////////////////////////////////////////
+
 void A3SendDataStandard(uint32_t id, uint8_t dlc, CAN_DATA_BYTES_MSG *data)
 {
     CAN_TX_MSG message = {
@@ -98,6 +95,149 @@ void A3SendDataExtended(uint32_t id, uint8_t dlc, CAN_DATA_BYTES_MSG *data)
     };
     CAN_SendMsg(&message);
 }
+
+// Stream control ////////////////////////////////////////////////////////////////////////
+
+// communication states
+static struct stream_state {
+    int prop_position;
+    int data_position;
+    uint32_t wire_id;
+    int num_remaining_properties;
+} stream_state = {
+    .prop_position = 0,
+    .data_position = 0,
+    .wire_id = A3_ID_INVALID,
+    .num_remaining_properties = 0,
+};
+
+/**
+ * Initializes the admin wire.
+ *
+ * @param wire_id - wire ID to start
+ * @param prop_start_index - starting index of the properties
+ * @param num_props - number of properties to send
+ */
+static void InitializeWire(uint32_t wire_id, int prop_start_index, int num_props)
+{
+    stream_state.wire_id = wire_id;
+    stream_state.prop_position = prop_start_index;
+    stream_state.num_remaining_properties = num_props;
+}
+
+/**
+ * Check current stream state and terminate property and/or chunk if the positions
+ * reach the ends.
+ */
+static void CheckForTransferTermination(int property_data_length)
+{
+    if (stream_state.data_position == property_data_length) {
+        // completed transferring the property. proceed to the next.
+        stream_state.data_position = 0;
+        ++stream_state.prop_position;
+        --stream_state.num_remaining_properties;
+        if (stream_state.num_remaining_properties == 0) {
+            // entire transfer completed. clear the wire ID
+            stream_state.wire_id = A3_ID_INVALID;
+        }
+    }
+}
+
+#define MIN(x, y) ((x) < (y) ? (x) : (y))
+
+static int FillInt(a3_module_property_t *prop, CAN_DATA_BYTES_MSG *data, int payload_index, uint8_t num_bytes)
+{
+    if (stream_state.data_position < 2) {
+        data->byte[payload_index++] = num_bytes;
+        ++stream_state.data_position;
+        if (payload_index == A3_DATA_LENGTH) {
+            return payload_index;
+        }
+    }
+    uint32_t value = *(uint32_t *)prop->data;
+    uint8_t total_bytes = num_bytes + 2;
+    int bytes_to_send = MIN(A3_DATA_LENGTH - payload_index, total_bytes - stream_state.data_position);
+    value >>= (total_bytes - bytes_to_send - stream_state.data_position) * 8; 
+    for (int i = 0; i < bytes_to_send; ++i) {
+        data->byte[payload_index + bytes_to_send - i - 1] = value & 0xff;
+        value >>= 8;
+    }
+    stream_state.data_position += bytes_to_send;
+    payload_index += bytes_to_send;
+    CheckForTransferTermination(total_bytes);
+    return payload_index;
+}
+
+static int FillVectorU8(a3_module_property_t *prop, CAN_DATA_BYTES_MSG *data, int payload_index)
+{
+    a3_vector_t *vector = (a3_vector_t *)prop->data;
+    if (stream_state.data_position < 2) {
+        data->byte[payload_index++] = vector->size;
+        ++stream_state.data_position;
+        if (payload_index == A3_DATA_LENGTH) {
+            return payload_index;
+        }
+    }
+    // This implementation could be faster but is endian free.
+    int data_index = stream_state.data_position - 2;
+    int data_size = MIN(A3_DATA_LENGTH - payload_index, vector->size - data_index);
+    memcpy(&data->byte[payload_index], &((uint8_t*)vector->data)[data_index], data_size);
+    stream_state.data_position += data_size;
+    payload_index += data_size;
+    CheckForTransferTermination(vector->size + 2);
+    return payload_index;
+}
+
+static int FillString(a3_module_property_t *prop, CAN_DATA_BYTES_MSG *data, int payload_index)
+{
+    const char *value = (const char *)prop->data;
+    uint8_t length = strlen(value);
+    if (stream_state.data_position < 2) {
+        data->byte[payload_index++] = length;
+        ++stream_state.data_position;
+        if (payload_index == A3_DATA_LENGTH) {
+            return payload_index;
+        }
+    }
+    // This implementation could be faster but is endian free.
+    int data_index = stream_state.data_position - 2;
+    int data_size = MIN(A3_DATA_LENGTH - payload_index, length - data_index);
+    memcpy(&data->byte[payload_index], &value[data_index], data_size);
+    stream_state.data_position += data_size;
+    payload_index += data_size;
+    CheckForTransferTermination(length + 2);
+    return payload_index;
+}
+
+int FillPropertyData(CAN_DATA_BYTES_MSG *data, int payload_index)
+{
+    if (stream_state.prop_position >= NUM_PROPS) {
+        return A3_DATA_LENGTH;
+    }
+    a3_module_property_t *current_prop = &config[stream_state.prop_position];
+    if (stream_state.data_position < 1) {
+        data->byte[payload_index++] = current_prop->id;
+        ++stream_state.data_position;
+        if (payload_index == A3_DATA_LENGTH) {
+            return payload_index;
+        }
+    }
+    switch (current_prop->value_type) {
+    case A3_U8:
+        return FillInt(current_prop, data, payload_index, 1);
+    case A3_U16:
+        return FillInt(current_prop, data, payload_index, 2);
+    case A3_U32:
+        return FillInt(current_prop, data, payload_index, 4);
+    case A3_STRING:
+        return FillString(current_prop, data, payload_index);
+    case A3_VECTOR_U8:
+        return FillVectorU8(current_prop, data, payload_index);
+    }
+    return A3_DATA_LENGTH;
+}
+
+// Module API methods ///////////////////////////////////////////////////////////////////////
 
 void InitializeA3Module()
 {
@@ -142,177 +282,29 @@ static void RequestUidCancel(uint32_t id)
 
 static void HandleRequestName()
 {
-    wire_id = CAN_RX_DATA_BYTE(0, 2) + A3_ID_ADMIN_WIRES_BASE;
-    data_position = 0;
-    int payload_index = 0;
+    uint32_t wire_id = CAN_RX_DATA_BYTE(0, 2) + A3_ID_ADMIN_WIRES_BASE;
+    InitializeWire(wire_id, PROP_MODULE_NAME, 1);
     CAN_DATA_BYTES_MSG data;
-    data.byte[payload_index++] = A3_ATTR_NAME;
-    uint8_t name_length = strlen(module_name);
-    data.byte[payload_index++] = name_length;
-    for (; payload_index < A3_DATA_LENGTH && data_position < name_length; ++payload_index, ++data_position) {
-        data.byte[payload_index] = module_name[data_position];
-    }
+    int payload_index = FillPropertyData(&data, 0);
     A3SendDataStandard(wire_id, payload_index, &data);
 }
 
 static void HandleContinueName()
 {
-    int payload_index = 0;
+    uint32_t wire_id = stream_state.wire_id;
+    if (wire_id == A3_ID_INVALID) {
+        // no active stream, ignore.
+        return;
+    }
     CAN_DATA_BYTES_MSG data;
-    uint8_t name_length = strlen(module_name);
-    for (; payload_index < A3_DATA_LENGTH && data_position < name_length; ++payload_index, ++data_position) {
-        data.byte[payload_index] = module_name[data_position];
-    }
+    int payload_index = FillPropertyData(&data, 0);
     A3SendDataStandard(wire_id, payload_index, &data);
-}
-
-static int FillU8(a3_module_property_t *prop, CAN_DATA_BYTES_MSG *data, int payload_index)
-{
-    if (data_position < 2) {
-        data->byte[payload_index++] = 1;
-        ++data_position;
-        if (payload_index == A3_DATA_LENGTH) {
-            return payload_index;
-        }
-    }
-    data->byte[payload_index++] = *(uint8_t *)prop->data;
-    data_position = 0;
-    ++prop_position;
-    return payload_index;
-}
-
-#define MIN(x, y) ((x) < (y) ? (x) : (y))
-
-static int FillU16(a3_module_property_t *prop, CAN_DATA_BYTES_MSG *data, int payload_index)
-{
-    if (data_position < 2) {
-        data->byte[payload_index++] = 2;
-        ++data_position;
-        if (payload_index == A3_DATA_LENGTH) {
-            return payload_index;
-        }
-    }
-    uint32_t value = *(uint32_t *)prop->data;
-    int data_size = MIN(A3_DATA_LENGTH - payload_index, 4 - data_position);
-    value >>= (4 - data_position - data_size) * 8; 
-    for (int i = 0; i < data_size; ++i) {
-        data->byte[payload_index + data_size - i - 1] = value & 0xff;
-        value >>= 8;
-    }
-    data_position += data_size;
-    payload_index += data_size;
-    if (data_position == 4) {
-        ++prop_position;
-        data_position = 0;
-    }
-    return payload_index;
-}
-
-static int FillU32(a3_module_property_t *prop, CAN_DATA_BYTES_MSG *data, int payload_index)
-{
-    if (data_position < 2) {
-        data->byte[payload_index++] = 4;
-        ++data_position;
-        if (payload_index == A3_DATA_LENGTH) {
-            return payload_index;
-        }
-    }
-    uint32_t value = *(uint32_t *)prop->data;
-    int data_size = MIN(A3_DATA_LENGTH - payload_index, 6 - data_position);
-    value >>= (6 - data_position - data_size) * 8; 
-    for (int i = 0; i < data_size; ++i) {
-        data->byte[payload_index + data_size - i - 1] = value & 0xff;
-        value >>= 8;
-    }
-    data_position += data_size;
-    payload_index += data_size;
-    if (data_position == 6) {
-        ++prop_position;
-        data_position = 0;
-    }
-    return payload_index;
-}
-
-static int FillVectorU8(a3_module_property_t *prop, CAN_DATA_BYTES_MSG *data, int payload_index)
-{
-    a3_vector_t *vector = (a3_vector_t *)prop->data;
-    if (data_position < 2) {
-        data->byte[payload_index++] = vector->size;
-        ++data_position;
-        if (payload_index == A3_DATA_LENGTH) {
-            return payload_index;
-        }
-    }
-    // This implementation could be faster but is endian free.
-    int data_index = data_position - 2;
-    int data_size = MIN(A3_DATA_LENGTH - payload_index, vector->size - data_index);
-    memcpy(&data->byte[payload_index], &((uint8_t*)vector->data)[data_index], data_size);
-    data_position += data_size;
-    payload_index += data_size;
-    if (data_position == vector->size + 2) {
-        ++prop_position;
-        data_position = 0;
-    }
-    return payload_index;
-}
-
-static int FillString(a3_module_property_t *prop, CAN_DATA_BYTES_MSG *data, int payload_index)
-{
-    const char *value = (const char *)prop->data;
-    uint8_t length = strlen(value);
-    if (data_position < 2) {
-        data->byte[payload_index++] = length;
-        ++data_position;
-        if (payload_index == A3_DATA_LENGTH) {
-            return payload_index;
-        }
-    }
-    // This implementation could be faster but is endian free.
-    int data_index = data_position - 2;
-    int data_size = MIN(A3_DATA_LENGTH - payload_index, length - data_index);
-    memcpy(&data->byte[payload_index], &value[data_index], data_size);
-    data_position += data_size;
-    payload_index += data_size;
-    if (data_position == length + 2) {
-        ++prop_position;
-        data_position = 0;
-    }
-    return payload_index;
-}
-
-static int FillPropertyData(CAN_DATA_BYTES_MSG *data, int payload_index)
-{
-    if (prop_position >= NUM_PROPS) {
-        return A3_DATA_LENGTH;
-    }
-    a3_module_property_t *current_prop = &config[prop_position];
-    if (data_position < 1) {
-        data->byte[payload_index++] = current_prop->id;
-        ++data_position;
-        if (payload_index == A3_DATA_LENGTH) {
-            return payload_index;
-        }
-    }
-    switch (current_prop->value_type) {
-    case A3_U8:
-        return FillU8(current_prop, data, payload_index);
-    case A3_U16:
-        return FillU16(current_prop, data, payload_index);
-    case A3_U32:
-        return FillU32(current_prop, data, payload_index);
-    case A3_STRING:
-        return FillString(current_prop, data, payload_index);
-    case A3_VECTOR_U8:
-        return FillVectorU8(current_prop, data, payload_index);
-    }
-    return A3_DATA_LENGTH;
 }
 
 static void HandleRequestConfig()
 {
-    wire_id = CAN_RX_DATA_BYTE(0, 2) + A3_ID_ADMIN_WIRES_BASE;
-    prop_position = 0;
-    data_position = 0;
+    uint32_t wire_id = CAN_RX_DATA_BYTE(0, 2) + A3_ID_ADMIN_WIRES_BASE;
+    InitializeWire(wire_id, 0, NUM_PROPS);
     int payload_index = 0;
     CAN_DATA_BYTES_MSG data;
     data.byte[payload_index++] = NUM_PROPS;
@@ -324,6 +316,11 @@ static void HandleRequestConfig()
 
 static void HandleContinueConfig()
 {
+    uint32_t wire_id = stream_state.wire_id;
+    if (wire_id == A3_ID_INVALID) {
+        // no active stream, ignore.
+        return;
+    }
     int payload_index = 0;
     CAN_DATA_BYTES_MSG data;
     while (payload_index < A3_DATA_LENGTH) {
