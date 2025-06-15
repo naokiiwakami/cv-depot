@@ -22,15 +22,19 @@
 
 #define A3_ID_UNASSIGNED 0
 
+// module identifiers
 uint32_t a3_module_uid;
 uint16_t a3_module_id;
 
 static uint8_t a3_module_type = MODULE_TYPE;
 static uint8_t num_voices = NUM_VOICES;
 
+// communication states
 static char module_name[64];
 static int prop_position = 0;
 static int data_position = 0;
+
+static uint32_t wire_id = 0;
 
 static a3_vector_t channels = {
     .size = NUM_VOICES,
@@ -138,29 +142,28 @@ static void RequestUidCancel(uint32_t id)
 
 static void HandleRequestName()
 {
+    wire_id = CAN_RX_DATA_BYTE(0, 2) + A3_ID_ADMIN_WIRES_BASE;
     data_position = 0;
     int payload_index = 0;
     CAN_DATA_BYTES_MSG data;
-    data.byte[payload_index++] = A3_IM_NAME_REPLY;
     data.byte[payload_index++] = A3_ATTR_NAME;
     uint8_t name_length = strlen(module_name);
     data.byte[payload_index++] = name_length;
     for (; payload_index < A3_DATA_LENGTH && data_position < name_length; ++payload_index, ++data_position) {
         data.byte[payload_index] = module_name[data_position];
     }
-    A3SendDataStandard(a3_module_id, payload_index, &data);
+    A3SendDataStandard(wire_id, payload_index, &data);
 }
 
 static void HandleContinueName()
 {
     int payload_index = 0;
     CAN_DATA_BYTES_MSG data;
-    data.byte[payload_index++] = A3_IM_NAME_REPLY;
     uint8_t name_length = strlen(module_name);
     for (; payload_index < A3_DATA_LENGTH && data_position < name_length; ++payload_index, ++data_position) {
         data.byte[payload_index] = module_name[data_position];
     }
-    A3SendDataStandard(a3_module_id, payload_index, &data);
+    A3SendDataStandard(wire_id, payload_index, &data);
 }
 
 static int FillU8(a3_module_property_t *prop, CAN_DATA_BYTES_MSG *data, int payload_index)
@@ -179,6 +182,31 @@ static int FillU8(a3_module_property_t *prop, CAN_DATA_BYTES_MSG *data, int payl
 }
 
 #define MIN(x, y) ((x) < (y) ? (x) : (y))
+
+static int FillU16(a3_module_property_t *prop, CAN_DATA_BYTES_MSG *data, int payload_index)
+{
+    if (data_position < 2) {
+        data->byte[payload_index++] = 2;
+        ++data_position;
+        if (payload_index == A3_DATA_LENGTH) {
+            return payload_index;
+        }
+    }
+    uint32_t value = *(uint32_t *)prop->data;
+    int data_size = MIN(A3_DATA_LENGTH - payload_index, 4 - data_position);
+    value >>= (4 - data_position - data_size) * 8; 
+    for (int i = 0; i < data_size; ++i) {
+        data->byte[payload_index + data_size - i - 1] = value & 0xff;
+        value >>= 8;
+    }
+    data_position += data_size;
+    payload_index += data_size;
+    if (data_position == 4) {
+        ++prop_position;
+        data_position = 0;
+    }
+    return payload_index;
+}
 
 static int FillU32(a3_module_property_t *prop, CAN_DATA_BYTES_MSG *data, int payload_index)
 {
@@ -268,6 +296,8 @@ static int FillPropertyData(CAN_DATA_BYTES_MSG *data, int payload_index)
     switch (current_prop->value_type) {
     case A3_U8:
         return FillU8(current_prop, data, payload_index);
+    case A3_U16:
+        return FillU16(current_prop, data, payload_index);
     case A3_U32:
         return FillU32(current_prop, data, payload_index);
     case A3_STRING:
@@ -280,27 +310,26 @@ static int FillPropertyData(CAN_DATA_BYTES_MSG *data, int payload_index)
 
 static void HandleRequestConfig()
 {
+    wire_id = CAN_RX_DATA_BYTE(0, 2) + A3_ID_ADMIN_WIRES_BASE;
     prop_position = 0;
     data_position = 0;
     int payload_index = 0;
     CAN_DATA_BYTES_MSG data;
-    data.byte[payload_index++] = A3_IM_CONFIG_REPLY;
     data.byte[payload_index++] = NUM_PROPS;
     while (payload_index < A3_DATA_LENGTH) {
         payload_index = FillPropertyData(&data, payload_index);
     }
-    A3SendDataStandard(a3_module_id, payload_index, &data);
+    A3SendDataStandard(wire_id, payload_index, &data);
 }
 
 static void HandleContinueConfig()
 {
     int payload_index = 0;
     CAN_DATA_BYTES_MSG data;
-    data.byte[payload_index++] = A3_IM_CONFIG_REPLY;
     while (payload_index < A3_DATA_LENGTH) {
         payload_index = FillPropertyData(&data, payload_index);
     }
-    A3SendDataStandard(a3_module_id, payload_index, &data);
+    A3SendDataStandard(wire_id, payload_index, &data);
 }
 
 static void HandleMissionControlCommand(uint8_t opcode)

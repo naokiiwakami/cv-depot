@@ -19,8 +19,10 @@
 #define A3_ID_MIDI_VOICE_BASE   0x101
 #define A3_ID_MIDI_REAL_TIME    0x140
 
-#define A3_ID_MISSION_CONTROL        0x700
-#define A3_ID_IM_BASE                0x700
+#define A3_ID_ADMIN_WIRES_BASE  0x680
+
+#define A3_ID_MISSION_CONTROL   0x700
+#define A3_ID_IM_BASE           0x700
 
 // Message types //////////////////////////////////
 
@@ -62,7 +64,7 @@
 
 enum A3PropertyValueType {
     A3_U8,
-    // A3_U16,
+    A3_U16,
     A3_U32,
     // A3_I8,
     // A3_I16,
@@ -89,7 +91,7 @@ typedef struct A3ModuleProperty {
 #define PROP_MODULE_UID 0
 #define TYPE_MODULE_UID A3_U32
 #define PROP_MODULE_TYPE 1
-#define TYPE_MODULE_TYPE A3_U8
+#define TYPE_MODULE_TYPE A3_U16
 #define PROP_MODULE_NAME 2
 #define TYPE_MODULE_NAME A3_STRING
 
