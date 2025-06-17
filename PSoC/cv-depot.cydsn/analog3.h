@@ -54,6 +54,7 @@
 #define A3_MC_CONTINUE_NAME 0x05
 #define A3_MC_REQUEST_CONFIG 0x06
 #define A3_MC_CONTINUE_CONFIG 0x07
+#define A3_MC_MODIFY_CONFIG 0x08
 
 /* Individual module opcodes */
 #define A3_IM_PING_REPLY 0x01
@@ -82,7 +83,9 @@ typedef struct A3Vector {
 typedef struct A3ModuleProperty {
     uint8_t id;  // attribute ID
     uint8_t value_type; // value type
+    uint8_t protected;  // indicates if the value is write-protected
     void *data;
+    void (*commit)(struct A3ModuleProperty *);  // function to commit stream data
 } a3_module_property_t;
 
 // Properties that are common among modules
