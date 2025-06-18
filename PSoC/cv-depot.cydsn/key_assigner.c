@@ -1,14 +1,26 @@
-/* ========================================
+/*
+ * MIT License
  *
- * Copyright YOUR COMPANY, THE YEAR
- * All Rights Reserved
- * UNPUBLISHED, LICENSED SOFTWARE.
+ * Copyright (c) 2025 Naoki Iwakami
  *
- * CONFIDENTIAL AND PROPRIETARY INFORMATION
- * WHICH IS THE PROPERTY OF your company.
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
  *
- * ========================================
-*/
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
 
 #include <stddef.h>
 #include <stdint.h>
@@ -27,12 +39,12 @@ void VoiceNoteOn(voice_t *voice, uint8_t note_number, uint8_t velocity)
         voice->in_use[voice->notes[MAX_NOTES-1]] = 0;
     } else {
         ++voice->num_notes;
-    }    
+    }
     for (int i = voice->num_notes; --i > 0;) {
         voice->notes[i] = voice->notes[i - 1];
     }
     voice->notes[0] = note_number;
-    
+
     // Update the hardware
     CAN_DATA_BYTES_MSG data;
     for (voice_t *current = voice; current != NULL; current = current->next_voice) {
@@ -71,10 +83,10 @@ void VoiceNoteOff(voice_t *voice, uint8_t note_number)
     for (int i = to_drop; i < voice->num_notes - 1; ++i) {
         voice->notes[i] = voice->notes[i + 1];
     }
-    
+
     voice->in_use[note_number] = 0;
     --voice->num_notes;
-    
+
     if (to_drop > 0) {
         // hidden note, do nothing
         return;
@@ -155,7 +167,7 @@ void NoteOn(key_assigner_t *assigner, uint8_t note_number, uint8_t velocity)
         NoteOff(assigner, note_number);
         return;
     }
-    
+
     for (int i = 0; i < assigner->num_voices; ++i) {
         if (assigner->voices[i]->in_use[note_number]) {
             VoiceReactivateNote(assigner->voices[i], note_number, velocity);

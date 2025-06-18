@@ -1,14 +1,26 @@
-/* ========================================
+/*
+ * MIT License
  *
- * Copyright YOUR COMPANY, THE YEAR
- * All Rights Reserved
- * UNPUBLISHED, LICENSED SOFTWARE.
+ * Copyright (c) 2025 Naoki Iwakami
  *
- * CONFIDENTIAL AND PROPRIETARY INFORMATION
- * WHICH IS THE PROPERTY OF your company.
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
  *
- * ========================================
-*/
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -17,58 +29,15 @@
 #include "config.h"
 #include "eeprom.h"
 #include "hardware.h"
-#include "key_assigner.h"
-#include "midi.h"
 
-// module properties //////////////////////////////////////////////////
-
-// identifiers
-uint32_t a3_module_uid;
-uint16_t a3_module_id;
-
-static uint8_t a3_module_type = MODULE_TYPE;
-static uint8_t num_voices = NUM_VOICES;
-
-static char module_name[64];
-
-static a3_vector_t channels = {
-    .size = NUM_VOICES,
-    .data = &midi_config.channels,
-};
-
-static a3_module_property_t config[NUM_PROPS] = {
-    {
-        .id = PROP_MODULE_UID,
-        .value_type = TYPE_MODULE_UID,
-        .data = &a3_module_uid,
-    }, {
-        .id = PROP_MODULE_TYPE,
-        .value_type = TYPE_MODULE_TYPE,
-        .data = &a3_module_type,
-    }, {
-        .id = PROP_MODULE_NAME,
-        .value_type = TYPE_MODULE_NAME,
-        .data = module_name,
-    }, {
-        .id = PROP_NUM_VOICES,
-        .value_type = TYPE_NUM_VOICES,
-        .data = &num_voices,
-    }, {
-        .id = PROP_KEY_ASSIGNMENT_MODE,
-        .value_type = TYPE_KEY_ASSIGNMENT_MODE,
-        .data = &midi_config.key_assignment_mode,
-    }, {
-        .id = PROP_KEY_PRIORITY,
-        .value_type = TYPE_KEY_PRIORITY,
-        .data = &midi_config.key_priority,
-    }, {
-        .id = PROP_MIDI_CHANNELS,
-        .value_type = TYPE_MIDI_CHANNELS,
-        .data = &channels,
-    }, 
-};
+// Temporary buffer to keep config data while streaming.
+// We don't use heap since its size is very limited.
+static uint8_t stream_buffer[A3_MAX_CONFIG_DATA_LENGTH];
 
 // CAN tx/rx methods /////////////////////////////////////////////////////
+
+#define MAILBOX_MC 0
+#define MAILBOX_OTHERS 1
 
 void A3SendDataStandard(uint32_t id, uint8_t dlc, CAN_DATA_BYTES_MSG *data)
 {
@@ -79,6 +48,20 @@ void A3SendDataStandard(uint32_t id, uint8_t dlc, CAN_DATA_BYTES_MSG *data)
         .dlc = dlc,
         .irq = 0,
         .msg = data,
+    };
+    CAN_SendMsg(&message);
+}
+
+void A3SendRemoteFrameStandard(uint32_t id)
+{
+    // CAN_DATA_BYTES_MSG msg;
+    CAN_TX_MSG message = {
+        .id = id,
+        .rtr = 1,
+        .ide = 0,
+        .dlc = 0,
+        .irq = 0,
+        .msg = NULL,
     };
     CAN_SendMsg(&message);
 }
@@ -100,36 +83,57 @@ void A3SendDataExtended(uint32_t id, uint8_t dlc, CAN_DATA_BYTES_MSG *data)
 
 // communication states
 static struct stream_state {
-    int prop_position;
-    int data_position;
-    uint32_t wire_id;
-    int num_remaining_properties;
+    uint32_t prop_position;
+    uint32_t data_position;
+    uint32_t wire_addr;
+
+    uint8_t num_remaining_properties;
+    uint8_t data_size;
 } stream_state = {
     .prop_position = 0,
     .data_position = 0,
-    .wire_id = A3_ID_INVALID,
+    .wire_addr = A3_ID_INVALID,
     .num_remaining_properties = 0,
+    .data_size = 0,
 };
 
 /**
- * Initializes the admin wire.
+ * Initializes the admin wire for writes.
  *
- * @param wire_id - wire ID to start
+ * @param wire_addr - wire ID to start
  * @param prop_start_index - starting index of the properties
  * @param num_props - number of properties to send
  */
-static void InitializeWire(uint32_t wire_id, int prop_start_index, int num_props)
+static void InitiateWireWrites(uint32_t wire_addr, int prop_start_index, int num_props)
 {
-    stream_state.wire_id = wire_id;
+    stream_state.wire_addr = wire_addr;
     stream_state.prop_position = prop_start_index;
     stream_state.num_remaining_properties = num_props;
+}
+
+#define NOWHERE 0xffffffff
+
+/**
+ * Initializes the admin wire for writes.
+ *
+ * @param wire_addr - wire ID to start
+ * @param prop_start_index - starting index of the properties
+ * @param num_props - number of properties to send
+ */
+static void InitiateWireReads(uint32_t wire_addr)
+{
+    stream_state.wire_addr = wire_addr;
+    stream_state.prop_position = NOWHERE;
+    stream_state.num_remaining_properties = 0;
+    stream_state.data_position = 0;
+    stream_state.data_size = 0;
 }
 
 /**
  * Check current stream state and terminate property and/or chunk if the positions
  * reach the ends.
  */
-static void CheckForTransferTermination(int property_data_length)
+static void CheckForTransferTermination(uint32_t property_data_length)
 {
     if (stream_state.data_position == property_data_length) {
         // completed transferring the property. proceed to the next.
@@ -138,14 +142,27 @@ static void CheckForTransferTermination(int property_data_length)
         --stream_state.num_remaining_properties;
         if (stream_state.num_remaining_properties == 0) {
             // entire transfer completed. clear the wire ID
-            stream_state.wire_id = A3_ID_INVALID;
+            stream_state.wire_addr = A3_ID_INVALID;
         }
     }
 }
 
+static uint8_t DoneStream()
+{
+    return stream_state.num_remaining_properties == 0;
+}
+
+static void TerminateWire()
+{
+    stream_state.wire_addr = A3_ID_INVALID;
+    stream_state.prop_position = 0;
+    stream_state.data_position = 0;
+    stream_state.num_remaining_properties = 0;
+}
+
 #define MIN(x, y) ((x) < (y) ? (x) : (y))
 
-static int FillInt(a3_module_property_t *prop, CAN_DATA_BYTES_MSG *data, int payload_index, uint8_t num_bytes)
+static int FillInt(a3_property_t *prop, CAN_DATA_BYTES_MSG *data, uint8_t payload_index, uint8_t num_bytes)
 {
     if (stream_state.data_position < 2) {
         data->byte[payload_index++] = num_bytes;
@@ -156,8 +173,8 @@ static int FillInt(a3_module_property_t *prop, CAN_DATA_BYTES_MSG *data, int pay
     }
     uint32_t value = *(uint32_t *)prop->data;
     uint8_t total_bytes = num_bytes + 2;
-    int bytes_to_send = MIN(A3_DATA_LENGTH - payload_index, total_bytes - stream_state.data_position);
-    value >>= (total_bytes - bytes_to_send - stream_state.data_position) * 8; 
+    uint8_t bytes_to_send = MIN(A3_DATA_LENGTH - payload_index, total_bytes - stream_state.data_position);
+    value >>= (total_bytes - bytes_to_send - stream_state.data_position) * 8;
     for (int i = 0; i < bytes_to_send; ++i) {
         data->byte[payload_index + bytes_to_send - i - 1] = value & 0xff;
         value >>= 8;
@@ -168,7 +185,7 @@ static int FillInt(a3_module_property_t *prop, CAN_DATA_BYTES_MSG *data, int pay
     return payload_index;
 }
 
-static int FillVectorU8(a3_module_property_t *prop, CAN_DATA_BYTES_MSG *data, int payload_index)
+static int FillVectorU8(a3_property_t *prop, CAN_DATA_BYTES_MSG *data, int payload_index)
 {
     a3_vector_t *vector = (a3_vector_t *)prop->data;
     if (stream_state.data_position < 2) {
@@ -188,7 +205,7 @@ static int FillVectorU8(a3_module_property_t *prop, CAN_DATA_BYTES_MSG *data, in
     return payload_index;
 }
 
-static int FillString(a3_module_property_t *prop, CAN_DATA_BYTES_MSG *data, int payload_index)
+static int FillString(a3_property_t *prop, CAN_DATA_BYTES_MSG *data, int payload_index)
 {
     const char *value = (const char *)prop->data;
     uint8_t length = strlen(value);
@@ -214,7 +231,7 @@ int FillPropertyData(CAN_DATA_BYTES_MSG *data, int payload_index)
     if (stream_state.prop_position >= NUM_PROPS) {
         return A3_DATA_LENGTH;
     }
-    a3_module_property_t *current_prop = &config[stream_state.prop_position];
+    a3_property_t *current_prop = &config[stream_state.prop_position];
     if (stream_state.data_position < 1) {
         data->byte[payload_index++] = current_prop->id;
         ++stream_state.data_position;
@@ -247,7 +264,11 @@ void InitializeA3Module()
         Save32(a3_module_uid, ADDR_MODULE_UID);
     }
     a3_module_id = A3_ID_UNASSIGNED;
-    strcpy(module_name, "cv-depot; a long time ago in a galaxy far, far away...");
+    LoadString(module_name, A3_MAX_CONFIG_DATA_LENGTH, ADDR_NAME);
+    if (module_name[0] == '\0') {
+       strcpy(module_name, "cv-depot");
+       SaveString(module_name, A3_MAX_CONFIG_DATA_LENGTH, ADDR_NAME);
+    }
 }
 
 static void CancelUid()
@@ -282,51 +303,58 @@ static void RequestUidCancel(uint32_t id)
 
 static void HandleRequestName()
 {
-    uint32_t wire_id = CAN_RX_DATA_BYTE(0, 2) + A3_ID_ADMIN_WIRES_BASE;
-    InitializeWire(wire_id, PROP_MODULE_NAME, 1);
+    uint32_t wire_addr = CAN_RX_DATA_BYTE(MAILBOX_MC, 2) + A3_ID_ADMIN_WIRES_BASE;
+    InitiateWireWrites(wire_addr, PROP_MODULE_NAME, 1);
     CAN_DATA_BYTES_MSG data;
     int payload_index = FillPropertyData(&data, 0);
-    A3SendDataStandard(wire_id, payload_index, &data);
+    A3SendDataStandard(wire_addr, payload_index, &data);
 }
 
 static void HandleContinueName()
 {
-    uint32_t wire_id = stream_state.wire_id;
-    if (wire_id == A3_ID_INVALID) {
+    uint32_t wire_addr = stream_state.wire_addr;
+    if (wire_addr == A3_ID_INVALID) {
         // no active stream, ignore.
         return;
     }
     CAN_DATA_BYTES_MSG data;
     int payload_index = FillPropertyData(&data, 0);
-    A3SendDataStandard(wire_id, payload_index, &data);
+    A3SendDataStandard(wire_addr, payload_index, &data);
 }
 
 static void HandleRequestConfig()
 {
-    uint32_t wire_id = CAN_RX_DATA_BYTE(0, 2) + A3_ID_ADMIN_WIRES_BASE;
-    InitializeWire(wire_id, 0, NUM_PROPS);
+    uint32_t wire_addr = CAN_RX_DATA_BYTE(MAILBOX_MC, 2) + A3_ID_ADMIN_WIRES_BASE;
+    InitiateWireWrites(wire_addr, 0, NUM_PROPS);
     int payload_index = 0;
     CAN_DATA_BYTES_MSG data;
     data.byte[payload_index++] = NUM_PROPS;
-    while (payload_index < A3_DATA_LENGTH) {
+    while (payload_index < A3_DATA_LENGTH && !DoneStream()) {
         payload_index = FillPropertyData(&data, payload_index);
     }
-    A3SendDataStandard(wire_id, payload_index, &data);
+    A3SendDataStandard(wire_addr, payload_index, &data);
 }
 
 static void HandleContinueConfig()
 {
-    uint32_t wire_id = stream_state.wire_id;
-    if (wire_id == A3_ID_INVALID) {
+    uint32_t wire_addr = stream_state.wire_addr;
+    if (wire_addr == A3_ID_INVALID) {
         // no active stream, ignore.
         return;
     }
     int payload_index = 0;
     CAN_DATA_BYTES_MSG data;
-    while (payload_index < A3_DATA_LENGTH) {
+    while (payload_index < A3_DATA_LENGTH && !DoneStream()) {
         payload_index = FillPropertyData(&data, payload_index);
     }
-    A3SendDataStandard(wire_id, payload_index, &data);
+    A3SendDataStandard(wire_addr, payload_index, &data);
+}
+
+static void HandleModifyConfig()
+{
+    uint32_t wire_addr = CAN_RX_DATA_BYTE(MAILBOX_MC, 2) + A3_ID_ADMIN_WIRES_BASE;
+    InitiateWireReads(wire_addr);
+    A3SendRemoteFrameStandard(wire_addr);
 }
 
 static void HandleMissionControlCommand(uint8_t opcode)
@@ -336,7 +364,7 @@ static void HandleMissionControlCommand(uint8_t opcode)
         CAN_DATA_BYTES_MSG data;
         data.byte[0] = A3_IM_PING_REPLY;
         A3SendDataStandard(a3_module_id, 1, &data);
-        if (CAN_GET_DLC(0) >= 3 && CAN_RX_DATA_BYTE(0, 2)) {
+        if (CAN_GET_DLC(MAILBOX_MC) >= 3 && CAN_RX_DATA_BYTE(MAILBOX_MC, 2)) {
             BlinkGreen(70, 3);
         }
         break;
@@ -353,14 +381,17 @@ static void HandleMissionControlCommand(uint8_t opcode)
     case A3_MC_CONTINUE_CONFIG:
         HandleContinueConfig();
         break;
+    case A3_MC_MODIFY_CONFIG:
+        HandleModifyConfig();
+        break;
     }
 }
 
 void HandleMissionControlMessage(void* arg)
 {
     (void)arg;
-    uint8_t opcode = CAN_RX_DATA_BYTE(0, 0);
-    
+    uint8_t opcode = CAN_RX_DATA_BYTE(MAILBOX_MC, 0);
+
     switch (opcode) {
     case A3_MC_SIGN_IN: {
         if (a3_module_id == A3_ID_UNASSIGNED) {
@@ -376,13 +407,13 @@ void HandleMissionControlMessage(void* arg)
             | CAN_RX_DATA_BYTE(0, 3) << 8
             | CAN_RX_DATA_BYTE(0, 4);
         if (target_module == a3_module_uid) {
-            a3_module_id = CAN_RX_DATA_BYTE(0, 5) + A3_ID_IM_BASE;
+            a3_module_id = CAN_RX_DATA_BYTE(MAILBOX_MC, 5) + A3_ID_IM_BASE;
         }
         Pin_LED_Write(0);
         break;
     }
     default: {
-        uint16_t target_module = CAN_RX_DATA_BYTE(0, 1) + A3_ID_IM_BASE;
+        uint16_t target_module = CAN_RX_DATA_BYTE(MAILBOX_MC, 1) + A3_ID_IM_BASE;
         if (target_module == a3_module_id) {
             HandleMissionControlCommand(opcode);
         }
@@ -390,20 +421,133 @@ void HandleMissionControlMessage(void* arg)
     }
 }
 
+static void ParseInteger(a3_property_t *prop, uint8_t payload_index, uint8_t bytes_to_read, uint8_t integer_bytes)
+{
+    (void) prop;
+    for (uint8_t i = 0; i < bytes_to_read; ++i) {
+        stream_buffer[integer_bytes - stream_state.data_position - i - 1] =
+            CAN_RX_DATA_BYTE(1, payload_index + i);
+    }
+}
+
+static void ParseString(a3_property_t *prop, uint8_t payload_index, uint8_t bytes_to_read)
+{
+    (void) prop;
+    uint8_t limit = A3_MAX_CONFIG_DATA_LENGTH - stream_state.data_position - 1; // buffer overflows beyond this
+    for (uint8_t i = 0; i < bytes_to_read && i < limit; ++i) {
+        stream_buffer[stream_state.data_position + i] = (char) CAN_RX_DATA_BYTE(1, payload_index + i);
+    }
+}
+
+static void ParseVectorU8(a3_property_t *prop, uint8_t payload_index, uint8_t bytes_to_read)
+{
+    (void) prop;
+    for (uint8_t i = 0; i < bytes_to_read; ++i) {
+        stream_buffer[stream_state.data_position + i] = (char) CAN_RX_DATA_BYTE(1, payload_index + i);
+    }
+}
+
+static void ConsumeRxData(a3_property_t *prop, uint8_t payload_index, uint8_t bytes_to_read)
+{
+    if (prop != NULL && !prop->protected) {
+        switch (prop->value_type) {
+        case A3_U8:
+            ParseInteger(prop, payload_index, bytes_to_read, 1);
+            break;
+        case A3_U16:
+            ParseInteger(prop, payload_index, bytes_to_read, 2);
+            break;
+        case A3_U32:
+            ParseInteger(prop, payload_index, bytes_to_read, 4);
+            break;
+        case A3_STRING:
+            ParseString(prop, payload_index, bytes_to_read);
+            break;
+        case A3_VECTOR_U8:
+            ParseVectorU8(prop, payload_index, bytes_to_read);
+            break;
+        }
+    }
+    stream_state.data_position += bytes_to_read;
+    if (stream_state.data_position == stream_state.data_size) {
+        // end reading a property
+        if (prop != NULL && !prop->protected && prop->commit != NULL) {
+            prop->commit(prop, stream_buffer, stream_state.data_size);
+        }
+        stream_state.data_position = 0;
+        stream_state.data_size = 0;
+        stream_state.prop_position = NOWHERE;
+        --stream_state.num_remaining_properties;
+    }
+}
+
+static void ReadDataFrame()
+{
+    uint8_t num_src_bytes = CAN_GET_DLC(1);
+    uint8_t payload_index = 0;
+    if (stream_state.num_remaining_properties == 0) {
+        stream_state.num_remaining_properties = CAN_RX_DATA_BYTE(MAILBOX_OTHERS, payload_index);
+        ++payload_index;
+    }
+    while (payload_index < num_src_bytes && !DoneStream()) {
+        if (stream_state.prop_position == NOWHERE) {
+            stream_state.prop_position = CAN_RX_DATA_BYTE(MAILBOX_OTHERS, payload_index);
+            ++payload_index;
+            if (payload_index >= num_src_bytes) {
+                return;
+            }
+        }
+        if (stream_state.data_size == 0) {
+            stream_state.data_size = CAN_RX_DATA_BYTE(MAILBOX_OTHERS, payload_index);
+            ++payload_index;
+            if (payload_index >= num_src_bytes) {
+                return;
+            }
+        }
+        a3_property_t *prop;
+        if (stream_state.prop_position >= NUM_PROPS) {
+            // unknown property
+            prop = NULL;
+        } else {
+            prop = &config[stream_state.prop_position];
+        }
+        uint8_t bytes_to_read = MIN(
+            stream_state.data_size - stream_state.data_position,
+            num_src_bytes - payload_index);
+        ConsumeRxData(prop, payload_index, bytes_to_read);
+        payload_index += bytes_to_read;
+        if (DoneStream()) {
+            TerminateWire();
+            break;
+        }
+        A3SendRemoteFrameStandard(stream_state.wire_addr);
+    }
+}
+
+static void HandleGeneralStandardMessage()
+{
+    uint32_t id = CAN_GET_RX_ID(MAILBOX_OTHERS);
+    if (id != stream_state.wire_addr) {
+        return;
+    }
+    // The message is a data frame to the current wire address
+    ReadDataFrame();
+}
+
 void HandleGeneralMessage(void *arg)
 {
     (void)arg;
-    uint8_t is_extended = CAN_GET_RX_IDE(1);
+    uint8_t is_extended = CAN_GET_RX_IDE(MAILBOX_OTHERS);
     if (!is_extended) {
-        // no jobs yet in the standard ID space
+        HandleGeneralStandardMessage();
         return;
     }
-    uint32_t id = CAN_GET_RX_ID(1);
+    uint32_t id = CAN_GET_RX_ID(MAILBOX_OTHERS);
     if (id != a3_module_uid) {
         // it's not about me
         return;
     }
-    uint8_t opcode = CAN_RX_DATA_BYTE(1, 0);
+    uint8_t opcode = CAN_RX_DATA_BYTE(MAILBOX_OTHERS, 0);
     switch (opcode) {
     case A3_ADMIN_SIGN_IN:
     case A3_ADMIN_NOTIFY_ID:

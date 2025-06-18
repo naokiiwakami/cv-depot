@@ -1,12 +1,26 @@
-/* ========================================
+/*
+ * MIT License
  *
- * Copyright YOUR COMPANY, THE YEAR
- * All Rights Reserved
- * UNPUBLISHED, LICENSED SOFTWARE.
+ * Copyright (c) 2025 Naoki Iwakami
  *
- * WHICH IS THE PROPERTY OF your company.
- * ========================================
-*/
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
 
 #pragma once
 
@@ -54,11 +68,13 @@
 #define A3_MC_CONTINUE_NAME 0x05
 #define A3_MC_REQUEST_CONFIG 0x06
 #define A3_MC_CONTINUE_CONFIG 0x07
+#define A3_MC_MODIFY_CONFIG 0x08
 
 /* Individual module opcodes */
 #define A3_IM_PING_REPLY 0x01
 
 #define A3_DATA_LENGTH 8
+#define A3_MAX_CONFIG_DATA_LENGTH 64
 
 enum A3PropertyValueType {
     A3_U8,
@@ -79,11 +95,16 @@ typedef struct A3Vector {
 /**
  * Least set of parameters necessary for sharing config with the Mission Control.
  */
-typedef struct A3ModuleProperty {
+typedef struct A3Property {
     uint8_t id;  // attribute ID
     uint8_t value_type; // value type
+    uint8_t protected;  // indicates if the value is write-protected
     void *data;
-} a3_module_property_t;
+    // function to commit stream data
+    void (*commit)(struct A3Property *, uint8_t *data, uint8_t len);
+    // address to persist configuration data, 0xffff for a constant value
+    uint16_t save_addr;
+} a3_property_t;
 
 // Properties that are common among modules
 #define PROP_MODULE_UID 0
