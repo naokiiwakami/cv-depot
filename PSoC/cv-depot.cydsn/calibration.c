@@ -1,14 +1,26 @@
-/* ========================================
+/*
+ * MIT License
  *
- * Copyright YOUR COMPANY, THE YEAR
- * All Rights Reserved
- * UNPUBLISHED, LICENSED SOFTWARE.
+ * Copyright (c) 2025 Naoki Iwakami
  *
- * CONFIDENTIAL AND PROPRIETARY INFORMATION
- * WHICH IS THE PROPERTY OF your company.
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
  *
- * ========================================
-*/
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
 
 #include "project.h"
 
@@ -30,7 +42,7 @@
  */
 static uint16_t FindBendOctaveWidth()
 {
-    QuadDec_SetCounter(0);    
+    QuadDec_SetCounter(0);
     int16_t counter_last_value = 0;
     uint16_t bend_lower = bend_offset;  // we know the target is 1V higher than the starting point.
     uint16_t bend_upper = BEND_STEPS;
@@ -41,9 +53,9 @@ static uint16_t FindBendOctaveWidth()
         // in case the stored data is coruppted and the bend gets out of range
         bend = (bend_lower + bend_upper) / 2;
     }
-    
+
     PWM_Bend_WriteCompare(bend);
-    
+
     // Run binary search. User would decide to go higher or lower.
     while (mode == MODE_CALIBRATION_BEND_WIDTH) {
         int16_t counter_value = QuadDec_GetCounter();
@@ -121,7 +133,7 @@ void SetUpOctaveMeasurement(struct calib_config *config, uint16_t wiper, uint16_
     ChangeWiper(config->pot, wiper);
     SetNote(config->voice, 36);
     bend_offset = BendToReference(-1);
-    PWM_Bend_WriteCompare(bend_offset - bend_octave_width);  
+    PWM_Bend_WriteCompare(bend_offset - bend_octave_width);
     SetNote(config->voice, 48);
 }
 
@@ -187,10 +199,10 @@ void CalibrateNoteCV(struct calib_config *config, uint16_t bend_octave_width)
 void CalibrateNoteCV(struct calib_config *config, uint16_t bend_octave_width)
 {
     RED_ENCODER_LED_ON();
-    
+
     LED_Driver_SetDisplayRAM(config->voice_ram, 0);
     Pin_Adj_S0_Write(config->comparator_switch);
-    
+
     uint8_t wiper_lowest = 0;
     uint8_t wiper_highest = 63;
     uint8_t wiper;
@@ -207,14 +219,14 @@ void CalibrateNoteCV(struct calib_config *config, uint16_t bend_octave_width)
             wiper_highest = wiper -1;
         }
     } while (wiper_highest - wiper_lowest > 0);
-        
+
     BlinkGreen(100, 5);
-    
+
     ChangeWiper(config->pot, wiper_highest);
-    
+
     // save the wiper position
     EEPROM_WriteByte(config->pot->current, config->save_address);
-    
+
     CyDelay(950);
 }
 #endif

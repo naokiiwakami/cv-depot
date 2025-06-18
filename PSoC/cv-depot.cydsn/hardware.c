@@ -1,14 +1,26 @@
-/* ========================================
+/*
+ * MIT License
  *
- * Copyright YOUR COMPANY, THE YEAR
- * All Rights Reserved
- * UNPUBLISHED, LICENSED SOFTWARE.
+ * Copyright (c) 2025 Naoki Iwakami
  *
- * CONFIDENTIAL AND PROPRIETARY INFORMATION
- * WHICH IS THE PROPERTY OF your company.
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
  *
- * ========================================
-*/
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
 
 #include "project.h"
 
@@ -72,7 +84,7 @@ void GetVoiceConfigs(voice_config_t voice_configs[], unsigned size)
     voice_configs[0].set_note = SetNote1;
     voice_configs[0].gate_on = Gate1On;
     voice_configs[0].gate_off = Gate1Off;
-    
+
     if (size < 2) {
         return;
     }
@@ -99,7 +111,7 @@ void InitializeVoiceControl()
     uint8_t wiper = EEPROM_ReadByte(ADDR_NOTE_1_WIPER);
     PotChangePlaceRequest(&pot_note_1, -1);  // move to termianl B to ensure the starting position
     PotChangePlaceRequest(&pot_note_1, wiper);
-    
+
     wiper = EEPROM_ReadByte(ADDR_NOTE_2_WIPER);
     PotChangePlaceRequest(&pot_note_2, -1);  // move to termianl B to ensure the starting position
     PotChangePlaceRequest(&pot_note_2, wiper);
@@ -116,11 +128,11 @@ void InitializeVoiceControl()
     }
     */
     // bend_offset = BEND_STEPS / 2;
-    
+
     // Gates
     // Gate1Off();
     // Gate2Off();
-    
+
     // Bend
     // BendPitch(0x00, PITCH_BEND_CENTER);  // set neutral
 

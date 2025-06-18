@@ -1,14 +1,26 @@
-/* ========================================
+/*
+ * MIT License
  *
- * Copyright YOUR COMPANY, THE YEAR
- * All Rights Reserved
- * UNPUBLISHED, LICENSED SOFTWARE.
+ * Copyright (c) 2025 Naoki Iwakami
  *
- * CONFIDENTIAL AND PROPRIETARY INFORMATION
- * WHICH IS THE PROPERTY OF your company.
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
  *
- * ========================================
-*/
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -17,78 +29,10 @@
 #include "config.h"
 #include "eeprom.h"
 #include "hardware.h"
-#include "key_assigner.h"
-#include "midi.h"
 
-// module properties //////////////////////////////////////////////////
-
-// identifiers
-uint32_t a3_module_uid;
-uint16_t a3_module_id;
-
-static uint8_t a3_module_type = MODULE_TYPE;
-static uint8_t num_voices = NUM_VOICES;
-
-#define MAX_CONFIG_DATA_LENGTH 64
-static char module_name[MAX_CONFIG_DATA_LENGTH];
 // Temporary buffer to keep config data while streaming.
 // We don't use heap since its size is very limited.
-static uint8_t stream_buffer[MAX_CONFIG_DATA_LENGTH];
-
-static a3_vector_t channels = {
-    .size = NUM_VOICES,
-    .data = &midi_config.channels,
-};
-
-static void commit_integer(a3_property_t *);
-static void commit_string(a3_property_t *);
-static void commit_vector_u8(a3_property_t *);
-
-static a3_property_t config[NUM_PROPS] = {
-    {
-        .id = PROP_MODULE_UID,
-        .value_type = TYPE_MODULE_UID,
-        .protected = 1,
-        .data = &a3_module_uid,
-        .commit = NULL,
-    }, {
-        .id = PROP_MODULE_TYPE,
-        .value_type = TYPE_MODULE_TYPE,
-        .protected = 1,
-        .data = &a3_module_type,
-        .commit = NULL,
-    }, {
-        .id = PROP_MODULE_NAME,
-        .value_type = TYPE_MODULE_NAME,
-        .protected = 0,
-        .data = module_name,
-        .commit = commit_string,
-    }, {
-        .id = PROP_NUM_VOICES,
-        .value_type = A3_U8,
-        .protected = 0,
-        .data = &num_voices,
-        .commit = commit_integer,
-    }, {
-        .id = PROP_KEY_ASSIGNMENT_MODE,
-        .value_type = A3_U8,
-        .protected = 0,
-        .data = &midi_config.key_assignment_mode,
-        .commit = commit_integer,
-    }, {
-        .id = PROP_KEY_PRIORITY,
-        .value_type = A3_U8,
-        .protected = 0,
-        .data = &midi_config.key_priority,
-        .commit = commit_integer,
-    }, {
-        .id = PROP_MIDI_CHANNELS,
-        .value_type = A3_VECTOR_U8,
-        .protected = 0,
-        .data = &channels,
-        .commit = commit_vector_u8,
-    }, 
-};
+static uint8_t stream_buffer[A3_MAX_CONFIG_DATA_LENGTH];
 
 // CAN tx/rx methods /////////////////////////////////////////////////////
 
@@ -160,7 +104,7 @@ static struct stream_state {
  * @param prop_start_index - starting index of the properties
  * @param num_props - number of properties to send
  */
-static void InitializeWireWrites(uint32_t wire_addr, int prop_start_index, int num_props)
+static void InitiateWireWrites(uint32_t wire_addr, int prop_start_index, int num_props)
 {
     stream_state.wire_addr = wire_addr;
     stream_state.prop_position = prop_start_index;
@@ -176,7 +120,7 @@ static void InitializeWireWrites(uint32_t wire_addr, int prop_start_index, int n
  * @param prop_start_index - starting index of the properties
  * @param num_props - number of properties to send
  */
-static void InitializeWireReads(uint32_t wire_addr)
+static void InitiateWireReads(uint32_t wire_addr)
 {
     stream_state.wire_addr = wire_addr;
     stream_state.prop_position = NOWHERE;
@@ -208,7 +152,7 @@ static uint8_t DoneStream()
     return stream_state.num_remaining_properties == 0;
 }
 
-static void TerminateStream()
+static void TerminateWire()
 {
     stream_state.wire_addr = A3_ID_INVALID;
     stream_state.prop_position = 0;
@@ -230,7 +174,7 @@ static int FillInt(a3_property_t *prop, CAN_DATA_BYTES_MSG *data, uint8_t payloa
     uint32_t value = *(uint32_t *)prop->data;
     uint8_t total_bytes = num_bytes + 2;
     uint8_t bytes_to_send = MIN(A3_DATA_LENGTH - payload_index, total_bytes - stream_state.data_position);
-    value >>= (total_bytes - bytes_to_send - stream_state.data_position) * 8; 
+    value >>= (total_bytes - bytes_to_send - stream_state.data_position) * 8;
     for (int i = 0; i < bytes_to_send; ++i) {
         data->byte[payload_index + bytes_to_send - i - 1] = value & 0xff;
         value >>= 8;
@@ -310,25 +254,6 @@ int FillPropertyData(CAN_DATA_BYTES_MSG *data, int payload_index)
     return A3_DATA_LENGTH;
 }
 
-void commit_integer(a3_property_t *prop)
-{
-    memcpy(prop->data, stream_buffer, stream_state.data_size);
-}
-
-void commit_string(a3_property_t *prop)
-{
-    size_t data_len = MIN(stream_state.data_size, MAX_CONFIG_DATA_LENGTH - 1);
-    memcpy(prop->data, stream_buffer, data_len);
-    ((char *)prop->data)[data_len] = 0;
-}
-
-void commit_vector_u8(a3_property_t *prop)
-{
-    a3_vector_t *value = (a3_vector_t *)prop->data;
-    size_t size = MIN(value->size, stream_state.data_size);
-    memcpy(value->data, stream_buffer, size);
-}
-
 // Module API methods ///////////////////////////////////////////////////////////////////////
 
 void InitializeA3Module()
@@ -339,7 +264,11 @@ void InitializeA3Module()
         Save32(a3_module_uid, ADDR_MODULE_UID);
     }
     a3_module_id = A3_ID_UNASSIGNED;
-    strcpy(module_name, "cv-depot; a long time ago in a galaxy far, far away...");
+    LoadString(module_name, A3_MAX_CONFIG_DATA_LENGTH, ADDR_NAME);
+    if (module_name[0] == '\0') {
+       strcpy(module_name, "cv-depot");
+       SaveString(module_name, A3_MAX_CONFIG_DATA_LENGTH, ADDR_NAME);
+    }
 }
 
 static void CancelUid()
@@ -375,7 +304,7 @@ static void RequestUidCancel(uint32_t id)
 static void HandleRequestName()
 {
     uint32_t wire_addr = CAN_RX_DATA_BYTE(MAILBOX_MC, 2) + A3_ID_ADMIN_WIRES_BASE;
-    InitializeWireWrites(wire_addr, PROP_MODULE_NAME, 1);
+    InitiateWireWrites(wire_addr, PROP_MODULE_NAME, 1);
     CAN_DATA_BYTES_MSG data;
     int payload_index = FillPropertyData(&data, 0);
     A3SendDataStandard(wire_addr, payload_index, &data);
@@ -396,7 +325,7 @@ static void HandleContinueName()
 static void HandleRequestConfig()
 {
     uint32_t wire_addr = CAN_RX_DATA_BYTE(MAILBOX_MC, 2) + A3_ID_ADMIN_WIRES_BASE;
-    InitializeWireWrites(wire_addr, 0, NUM_PROPS);
+    InitiateWireWrites(wire_addr, 0, NUM_PROPS);
     int payload_index = 0;
     CAN_DATA_BYTES_MSG data;
     data.byte[payload_index++] = NUM_PROPS;
@@ -424,7 +353,7 @@ static void HandleContinueConfig()
 static void HandleModifyConfig()
 {
     uint32_t wire_addr = CAN_RX_DATA_BYTE(MAILBOX_MC, 2) + A3_ID_ADMIN_WIRES_BASE;
-    InitializeWireReads(wire_addr);
+    InitiateWireReads(wire_addr);
     A3SendRemoteFrameStandard(wire_addr);
 }
 
@@ -462,7 +391,7 @@ void HandleMissionControlMessage(void* arg)
 {
     (void)arg;
     uint8_t opcode = CAN_RX_DATA_BYTE(MAILBOX_MC, 0);
-    
+
     switch (opcode) {
     case A3_MC_SIGN_IN: {
         if (a3_module_id == A3_ID_UNASSIGNED) {
@@ -504,7 +433,7 @@ static void ParseInteger(a3_property_t *prop, uint8_t payload_index, uint8_t byt
 static void ParseString(a3_property_t *prop, uint8_t payload_index, uint8_t bytes_to_read)
 {
     (void) prop;
-    uint8_t limit = MAX_CONFIG_DATA_LENGTH - stream_state.data_position - 1; // buffer overflows beyond this
+    uint8_t limit = A3_MAX_CONFIG_DATA_LENGTH - stream_state.data_position - 1; // buffer overflows beyond this
     for (uint8_t i = 0; i < bytes_to_read && i < limit; ++i) {
         stream_buffer[stream_state.data_position + i] = (char) CAN_RX_DATA_BYTE(1, payload_index + i);
     }
@@ -543,7 +472,7 @@ static void ConsumeRxData(a3_property_t *prop, uint8_t payload_index, uint8_t by
     if (stream_state.data_position == stream_state.data_size) {
         // end reading a property
         if (prop != NULL && !prop->protected && prop->commit != NULL) {
-            prop->commit(prop);
+            prop->commit(prop, stream_buffer, stream_state.data_size);
         }
         stream_state.data_position = 0;
         stream_state.data_size = 0;
@@ -588,7 +517,7 @@ static void ReadDataFrame()
         ConsumeRxData(prop, payload_index, bytes_to_read);
         payload_index += bytes_to_read;
         if (DoneStream()) {
-            TerminateStream();
+            TerminateWire();
             break;
         }
         A3SendRemoteFrameStandard(stream_state.wire_addr);

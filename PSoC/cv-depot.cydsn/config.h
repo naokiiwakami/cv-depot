@@ -24,7 +24,31 @@
 
 #pragma once
 
-extern void HandleSettingModes();
-extern void HandleSwitchEvent();
+#include "analog3.h"
+
+// type of this module
+#define MODULE_TYPE_CV_DEPOT 1
+
+// Property IDs
+#define PROP_NUM_VOICES 3
+#define PROP_KEY_ASSIGNMENT_MODE 4
+#define PROP_KEY_PRIORITY 5
+#define PROP_MIDI_CHANNELS 6
+#define NUM_PROPS 7
+/*
+TBD
+#define PROP_RETRIGGER 7
+#define TYPE_RETRIGGER A3_U8
+#define PROP_PORTAMENT_MODE 8
+#define TYPE_PORTAMENT_MODE A3_U8
+#define PROP_PORTAMENT_DIRECTION 9
+#define TYPE_PORTAMENT_DIRECTION A3_U8
+#define PROP_PORTAMENT_TIME 10
+#define TYPE_PORTAMENT_TYPE A3_U8
+*/
+
+extern char module_name[A3_MAX_CONFIG_DATA_LENGTH];
+
+extern a3_property_t config[NUM_PROPS];
 
 /* [] END OF FILE */

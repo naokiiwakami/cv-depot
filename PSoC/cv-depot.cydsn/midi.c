@@ -1,14 +1,26 @@
-/* ========================================
+/*
+ * MIT License
  *
- * Copyright YOUR COMPANY, THE YEAR
- * All Rights Reserved
- * UNPUBLISHED, LICENSED SOFTWARE.
+ * Copyright (c) 2025 Naoki Iwakami
  *
- * CONFIDENTIAL AND PROPRIETARY INFORMATION
- * WHICH IS THE PROPERTY OF your company.
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
  *
- * ========================================
-*/
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
 
 #include <string.h>
 
@@ -93,20 +105,20 @@ static void HandleMidiChannelMessage();
 void InitializeMidiControllers()
 {
     memset(&midi_config, 0, sizeof(midi_config));  // is memset safe to use?
-    
+
     // Set Basic MIDI channels
     midi_config.channels[0] = ReadEepromWithValueCheck(ADDR_MIDI_CH_1, 16);
     midi_config.channels[1] = ReadEepromWithValueCheck(ADDR_MIDI_CH_2, 16);
     midi_config.key_assignment_mode = ReadEepromWithValueCheck(ADDR_KEY_ASSIGNMENT_MODE, KEY_ASSIGN_END);
     midi_config.key_priority =
         ReadEepromWithValueCheck(ADDR_KEY_PRIORITY, KEY_PRIORITY_END);
-    
+
     // set A4 to all voices and turn off gates
     for (int i = 0; i < NUM_VOICES; ++i) {
         all_voices[i].gate_off();
         all_voices[i].set_note(A4);
     }
-    
+
     InitializeMidiDecoder();
 }
 
@@ -117,9 +129,9 @@ void InitializeMidiDecoder()
     midi_message = 0;
     midi_data_position = 0;
     midi_data_length = 0;
-    
+
     memset(key_assigners, 0, sizeof(key_assigners));
-    
+
     // TODO: Generalize the implementation for N number of voices
     key_assigners[midi_config.channels[0]] =
         InitializeKeyAssigner(&key_assigner_instances[0], midi_config.key_priority);
@@ -173,7 +185,7 @@ void ConsumeMidiByte(uint8_t rx_byte)
         }
         return;
     }
-    
+
     if (rx_byte >= SYSEX_IN) {
         midi_status = rx_byte;
         return;

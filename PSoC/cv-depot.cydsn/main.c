@@ -1,14 +1,26 @@
-/* ========================================
+/*
+ * MIT License
  *
- * Copyright YOUR COMPANY, THE YEAR
- * All Rights Reserved
- * UNPUBLISHED, LICENSED SOFTWARE.
+ * Copyright (c) 2025 Naoki Iwakami
  *
- * CONFIDENTIAL AND PROPRIETARY INFORMATION
- * WHICH IS THE PROPERTY OF your company.
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
  *
- * ========================================
-*/
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
 #include <malloc.h>
 #include <stdlib.h>
 
@@ -83,7 +95,7 @@ int main(void)
     ClearTasks();
     EEPROM_Start();
     PotGlobalInit();
-    
+
     CAN_Start();
     UART_Midi_Start();
     LED_Driver_Start();
@@ -92,17 +104,17 @@ int main(void)
     LED_Driver_SetBrightness(LED_Driver_BRIGHTNESS, 2);
     isr_SW_StartEx(SwitchHandler);
     QuadDec_Start();
-    
+
     InitializeA3Module();
     InitializeVoiceControl();
     KeyAssigner_ConnectVoices();
     InitializeMidiControllers();
 
     CyGlobalIntEnable; /* Enable global interrupts. */
-    
+
     Pin_LED_Write(1);
     SignIn();
-    
+
     // The main loop ////////////////////////////////////
     for (;;) {
         uint8_t status = UART_Midi_ReadRxStatus();
@@ -112,10 +124,10 @@ int main(void)
         }
         if (mode != MODE_NORMAL) {
             HandleSettingModes();
-        }        
+        }
         // Consume pot change requests if not empty
         PotChangeHandleRequests();
-        
+
         // Consume task if any, one at a time
         ConsumeTask();
     }
