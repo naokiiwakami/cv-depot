@@ -80,13 +80,13 @@ typedef struct A3Vector {
 /**
  * Least set of parameters necessary for sharing config with the Mission Control.
  */
-typedef struct A3ModuleProperty {
+typedef struct A3Property {
     uint8_t id;  // attribute ID
     uint8_t value_type; // value type
     uint8_t protected;  // indicates if the value is write-protected
     void *data;
-    void (*commit)(struct A3ModuleProperty *);  // function to commit stream data
-} a3_module_property_t;
+    void (*commit)(struct A3Property *);  // function to commit stream data
+} a3_property_t;
 
 // Properties that are common among modules
 #define PROP_MODULE_UID 0
