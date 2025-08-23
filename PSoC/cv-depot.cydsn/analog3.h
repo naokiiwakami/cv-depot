@@ -72,6 +72,7 @@
 
 /* Individual module opcodes */
 #define A3_IM_PING_REPLY 0x01
+#define A3_IM_ID_ASSIGN_ACK 0x02
 
 #define A3_DATA_LENGTH 8
 #define A3_MAX_CONFIG_DATA_LENGTH 64

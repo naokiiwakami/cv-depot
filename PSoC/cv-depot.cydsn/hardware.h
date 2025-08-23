@@ -30,6 +30,22 @@
 
 #include <stdint.h>
 
+// CAN
+#define MAILBOX_MC 0
+#define MAILBOX_OTHERS 15
+typedef struct _can_message {
+    uint32_t id;
+    uint8_t extended;
+    uint8_t dlc;
+    uint8_t data[8];
+} can_message_t;
+
+#define MESSAGE_QUEUE_SIZE 8
+extern can_message_t message_queue[MESSAGE_QUEUE_SIZE];
+extern uint32_t q_head;
+extern uint32_t q_tail;
+extern uint8_t q_full;
+
 #define BEND_STEPS 1024
 
 extern uint16_t bend_offset;

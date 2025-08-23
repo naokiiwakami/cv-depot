@@ -53,8 +53,9 @@ void VoiceNoteOn(voice_t *voice, uint8_t note_number, uint8_t velocity)
         data.byte[0] = A3_VOICE_MSG_SET_NOTE;
         data.byte[1] = note_number;
         data.byte[2] = A3_VOICE_MSG_GATE_ON;
-        data.byte[3] = velocity;
-        A3SendDataStandard(A3_ID_MIDI_VOICE_BASE + current->id, 4, &data);
+        data.byte[3] = velocity << 1;
+        data.byte[4] = 0;
+        A3SendDataStandard(A3_ID_MIDI_VOICE_BASE + current->id, 5, &data);
     }
     // LED_Driver_PutChar7Seg('N', 0);
     // LED_Driver_Write7SegNumberHex(note_number, 1, 2, LED_Driver_RIGHT_ALIGN);

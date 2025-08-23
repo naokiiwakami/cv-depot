@@ -32,6 +32,12 @@
 
 uint16_t bend_offset;
 
+// CAN message queue
+can_message_t message_queue[MESSAGE_QUEUE_SIZE];
+uint32_t q_head = 0;
+uint32_t q_tail = 0;
+uint8_t q_full = 0;
+
 // macros
 #define SetNote1 PWM_Notes_WriteCompare1
 #define SetNote2 PWM_Notes_WriteCompare2

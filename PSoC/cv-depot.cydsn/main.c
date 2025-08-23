@@ -112,7 +112,7 @@ int main(void)
 
     CyGlobalIntEnable; /* Enable global interrupts. */
 
-    Pin_LED_Write(1);
+    RED_ENCODER_LED_ON();
     SignIn();
 
     // The main loop ////////////////////////////////////
@@ -149,18 +149,42 @@ void CAN_MsgRXIsr_Callback()
 
 void CAN_ReceiveMsg_0_Callback()
 {
+    if (q_full) {
+        // we can't do anything
+        return;
+    }
+    can_message_t *message = &message_queue[q_head];
+    q_head = (q_head + 1) % MESSAGE_QUEUE_SIZE;
+    message->id = CAN_GET_RX_ID(MAILBOX_MC);
+    message->extended = CAN_GET_RX_IDE(MAILBOX_MC);
+    message->dlc = CAN_GET_DLC(MAILBOX_MC);
+    for (uint32_t i = 0; i < message->dlc; ++i) {
+        message->data[i] = CAN_RX_DATA_BYTE(MAILBOX_MC, i);
+    }
     task_t task = {
         .run = HandleMissionControlMessage,
-        .arg = NULL,
+        .arg = message,
     };
     ScheduleTask(task);
 }
 
 void CAN_ReceiveMsg_Callback()
 {
+    if (q_full) {
+        // we can't do anything
+        return;
+    }
+    can_message_t *message = &message_queue[q_head];
+    q_head = (q_head + 1) % MESSAGE_QUEUE_SIZE;
+    message->id = CAN_GET_RX_ID(MAILBOX_OTHERS);
+    message->extended = CAN_GET_RX_IDE(MAILBOX_OTHERS);
+    message->dlc = CAN_GET_DLC(MAILBOX_OTHERS);
+    for (uint32_t i = 0; i < message->dlc; ++i) {
+        message->data[i] = CAN_RX_DATA_BYTE(MAILBOX_OTHERS, i);
+    }
     task_t task = {
         .run = HandleGeneralMessage,
-        .arg = NULL,
+        .arg = message,
     };
     ScheduleTask(task);
 }
