@@ -32,6 +32,8 @@
 
 uint16_t bend_offset;
 
+enum GateType gate_type;
+
 // CAN message queue
 can_message_t message_queue[MESSAGE_QUEUE_SIZE];
 uint32_t q_head = 0;
@@ -62,6 +64,12 @@ static void Gate1On(uint8_t velocity)
     Pin_Gate_1_Write(1);
 }
 
+static void Gate1OnLegacy(uint8_t velocity)
+{
+    (void)velocity;
+    Gate1On(127);
+}
+
 static void Gate1Off()
 {
     Pin_Portament_En_Write(0);
@@ -76,6 +84,12 @@ static void Gate2On(uint8_t velocity)
     Pin_Gate_2_Write(1);
 }
 
+static void Gate2OnLegacy(uint8_t velocity)
+{
+    (void)velocity;
+    Gate2On(127);
+}
+
 static void Gate2Off()
 {
     DVDAC_Velocity_2_SetValue(0);
@@ -88,15 +102,26 @@ void GetVoiceConfigs(voice_config_t voice_configs[], unsigned size)
         return;
     }
     voice_configs[0].set_note = SetNote1;
-    voice_configs[0].gate_on = Gate1On;
+    voice_configs[0].gate_on = gate_type == GATE_TYPE_VELOCITY ? Gate1On : Gate1OnLegacy;
     voice_configs[0].gate_off = Gate1Off;
 
     if (size < 2) {
         return;
     }
     voice_configs[1].set_note = SetNote2;
-    voice_configs[1].gate_on = Gate2On;
+    voice_configs[1].gate_on = gate_type == GATE_TYPE_VELOCITY ? Gate2On : Gate2OnLegacy;
     voice_configs[1].gate_off = Gate2Off;
+}
+
+int8_t UpdateGateType(enum GateType new_gate_type)
+{
+    if (new_gate_type == gate_type) {
+        // no change, do nothing
+        return 0;
+    }
+    EEPROM_WriteByte(new_gate_type, ADDR_GATE_TYPE);
+    gate_type = new_gate_type;
+    return 1;
 }
 
 void InitializeVoiceControl()
@@ -113,7 +138,7 @@ void InitializeVoiceControl()
     DVDAC_Expression_Start();
     DVDAC_Modulation_Start();
 
-        // Note CV
+    // Note CV
     uint8_t wiper = EEPROM_ReadByte(ADDR_NOTE_1_WIPER);
     PotChangePlaceRequest(&pot_note_1, -1);  // move to termianl B to ensure the starting position
     PotChangePlaceRequest(&pot_note_1, wiper);
@@ -121,6 +146,12 @@ void InitializeVoiceControl()
     wiper = EEPROM_ReadByte(ADDR_NOTE_2_WIPER);
     PotChangePlaceRequest(&pot_note_2, -1);  // move to termianl B to ensure the starting position
     PotChangePlaceRequest(&pot_note_2, wiper);
+
+    // Gate type
+    gate_type = EEPROM_ReadByte(ADDR_GATE_TYPE);
+    if (gate_type > GATE_TYPE_LEGACY) {
+        gate_type = GATE_TYPE_VELOCITY;
+    }
 
     /*
     uint8_t temp = EEPROM_ReadByte(ADDR_BEND_OFFSET);

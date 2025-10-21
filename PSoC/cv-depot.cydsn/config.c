@@ -28,6 +28,7 @@
 #include "eeprom.h"
 #include "key_assigner.h"
 #include "midi.h"
+#include "voice.h"
 
 #define MIN(x, y) ((x) < (y) ? (x) : (y))
 
@@ -102,6 +103,13 @@ a3_property_t config[NUM_PROPS] = {
         .data = &channels,
         .commit = CommitVectorU8,
         .save_addr = ADDR_MIDI_CH_1,
+    }, {
+        .id = PROP_GATE_TYPE,
+        .value_type = A3_U8,
+        .protected = 0,
+        .data = &gate_type,
+        .commit = CommitVectorU8,
+        .save_addr = ADDR_GATE_TYPE,
     },
 };
 

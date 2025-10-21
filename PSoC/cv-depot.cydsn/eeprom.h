@@ -38,6 +38,7 @@
 #define ADDR_KEY_PRIORITY 0x0b
 #define ADDR_MODULE_UID 0x1c
 #define ADDR_NAME 0x20 /* - 0x60 */
+#define ADDR_GATE_TYPE 0x60
 
 #define ADDR_UNSET 0xffff
 

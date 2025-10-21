@@ -43,6 +43,7 @@ static void StartFinalization();
 static void InitiateKeyAssignSetup();
 static void InitiateMidiChannelSetup1();
 static void InitiateMidiChannelSetup2();
+static void InitiateGateTypeSetup();
 
 // Menu items would change by the configuration. The menu is built on demand by the switch interrupt
 // handler. It should be done quickly, so the menu items are kept in the static space.
@@ -50,10 +51,12 @@ static const menu_t kMenuSetChannel = { "ch ", InitiateMidiChannelSetup1 }; // f
 static const menu_t kMenuSetChannel1 = { "ch1", InitiateMidiChannelSetup1 }; // for voice 1
 static const menu_t kMenuSetChannel2 = { "ch2", InitiateMidiChannelSetup2 }; // for voice 2
 static const menu_t kMenuSetKeyAssignment = { "asn", InitiateKeyAssignSetup };
+static const menu_t kMenuSetGateType = { "gat", InitiateGateTypeSetup };
 static const menu_t kMenuCalibrate = { "cal", Calibrate }; // calibrate the bend center position
 static const menu_t kMenuDiagnose = { "dgn", Diagnose }; // diagnose the hardware
 
 const char *kKeyAssignmentModeName[KEY_ASSIGN_END] = { "duo", "uni", "par" };
+const char *kGateTypeName[GATE_TYPE_END] = { "a3 ", "leg" };
 
 // Setup operation states ///////////////////////
 
@@ -77,6 +80,7 @@ struct setup_state {
     union mode_specific {
         struct menu_selection menu;
         struct midi_setup midi;
+        enum GateType gate_type;
     } mode;
 };
 
@@ -92,6 +96,7 @@ static void BuildMenu()
         setup_state.mode.menu.menu[i++] = &kMenuSetChannel2;
     }
     setup_state.mode.menu.menu[i++] = &kMenuSetKeyAssignment;
+    setup_state.mode.menu.menu[i++] = &kMenuSetGateType;
     setup_state.mode.menu.menu[i++] = &kMenuCalibrate;
     setup_state.mode.menu.menu[i++] = &kMenuDiagnose;
     setup_state.mode.menu.menu_size = i;
@@ -136,6 +141,16 @@ void InitiateKeyAssignSetup()
     setup_state.prev_counter_value = -1;
     setup_state.mode.midi.config = *midi_config;
     setup_state.mode.midi.blink_count = 0;
+}
+
+void InitiateGateTypeSetup()
+{
+    mode = MODE_GATE_TYPE_SETUP;
+    GREEN_ENCODER_LED_ON();
+    RED_ENCODER_LED_ON();
+    setup_state.mode.gate_type = gate_type;
+    QuadDec_SetCounter(gate_type);
+    setup_state.prev_counter_value = -1;
 }
 
 // Settings event handlers ///////////////////////////////////////////////////
@@ -234,6 +249,26 @@ static void ConfirmKeyAssignmentMode()
     mode = MODE_NORMAL;
 }
 
+static void HandleGateTypeSetup()
+{
+    int8_t value = PickUpChangedEncoderValue(GATE_TYPE_END);
+    if (value >= 0) {
+        LED_Driver_WriteString7Seg(kGateTypeName[value], 0);
+        setup_state.mode.gate_type = value;
+    }
+}
+
+static void ConfirmGateType()
+{
+    GREEN_ENCODER_LED_OFF();
+    RED_ENCODER_LED_OFF();
+    if (UpdateGateType(setup_state.mode.gate_type)) {
+        KeyAssigner_ConnectVoices();
+    }
+    StartFinalization();
+    mode = MODE_NORMAL;
+}
+
 // Entry points ///////////////////////////////////////////////////////////////////////////////
 
 /**
@@ -264,6 +299,12 @@ void HandleSettingModes()
     case MODE_KEY_ASSIGNMENT_CONFIRMED:
         ConfirmKeyAssignmentMode();
         break;
+    case MODE_GATE_TYPE_SETUP:
+        HandleGateTypeSetup();
+        break;
+    case MODE_GATE_TYPE_CONFIRMED:
+        ConfirmGateType();
+        break;
     }
 }
 
@@ -286,6 +327,9 @@ void HandleSwitchEvent()
         break;
     case MODE_MIDI_CHANNEL_SETUP:
         mode = MODE_MIDI_CHANNEL_CONFIRMED;
+        break;
+    case MODE_GATE_TYPE_SETUP:
+        mode = MODE_GATE_TYPE_CONFIRMED;
         break;
     case MODE_CALIBRATION_INIT:
         mode = MODE_CALIBRATION_BEND_WIDTH;

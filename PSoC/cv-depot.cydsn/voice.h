@@ -36,12 +36,26 @@ enum Voice {
 };
 #define NUM_VOICES 2
 
+enum GateType {
+    GATE_TYPE_VELOCITY = 0,  // gate includes velocity info
+    GATE_TYPE_LEGACY,        // legacy 8V gate
+    GATE_TYPE_END,
+};
+
 typedef struct voice_config {
     void (*set_note)(uint8_t note_number);
     void (*gate_on)(uint8_t velocity);
     void (*gate_off)();
 } voice_config_t;
 
+extern enum GateType gate_type;
 extern void GetVoiceConfigs(voice_config_t voice_configs[], unsigned size);  // implemented in hardware.c
+/**
+ * Updates the gate_type to a new value.
+ *
+ * @param new_gate_type - New gate type
+ * @returns 1 when the value has changed, 0 otherwise
+ */
+extern int8_t UpdateGateType(enum GateType new_gate_type);
 
 /* [] END OF FILE */
