@@ -29,9 +29,60 @@
 
 #include "analog3.h"
 #include "key_assigner.h"
+#include "main.h"
 #include "voice.h"
 
+// We borrow PWM_Bend to count delay time, which has 21.354 usec cycle.
+// Gate should delay by about 10ms to avoid making sound during CV transition.
+#define GATE_DELAY 450
+
 voice_t all_voices[NUM_VOICES];
+
+static void SendGateOn(void *arg)
+{
+    voice_t *voice =(voice_t *)arg;
+    uint32_t target_time;
+    if (voice->gate_on_time > TIMER_COUNTER_WRAP) {
+        CyGlobalIntDisable;
+        target_time = (timer_counter & (TIMER_COUNTER_WRAP - (TIMER_COUNTER_WRAP >> 1))) ? timer_counter : timer_counter + TIMER_COUNTER_WRAP + 1;
+        CyGlobalIntEnable;
+    } else {
+        target_time = timer_counter;
+    }
+    if (voice->gate_on_time > target_time) {
+        task_t task = { .run = SendGateOn, .arg = voice};
+        ScheduleTask(task);
+        return;
+    }
+    voice->gate_on(voice->velocity);
+    // TODO: Split set note and get on
+    CAN_DATA_BYTES_MSG data;
+    data.byte[0] = A3_VOICE_MSG_SET_NOTE;
+    data.byte[1] = voice->notes[0];
+    data.byte[2] = A3_VOICE_MSG_GATE_ON;
+    data.byte[3] = voice->velocity << 1;
+    data.byte[4] = 0;
+    A3SendDataStandard(A3_ID_MIDI_VOICE_BASE + voice->id, 5, &data);
+}
+
+static void SendGateOff(void *arg)
+{
+    voice_t *voice =(voice_t *)arg;
+    uint32_t target_time;
+    if (voice->gate_off_time > TIMER_COUNTER_WRAP) {
+        CyGlobalIntDisable;
+        target_time = (timer_counter & (TIMER_COUNTER_WRAP - (TIMER_COUNTER_WRAP >> 1))) ? timer_counter : timer_counter + TIMER_COUNTER_WRAP + 1;
+        CyGlobalIntEnable;
+    } else {
+        target_time = timer_counter;
+    }
+    if (voice->gate_off_time > target_time) {
+        task_t task = { .run = SendGateOff, .arg = voice};
+        ScheduleTask(task);
+        return;
+    }
+    voice->gate_off();
+}
 
 void VoiceNoteOn(voice_t *voice, uint8_t note_number, uint8_t velocity)
 {
@@ -44,25 +95,23 @@ void VoiceNoteOn(voice_t *voice, uint8_t note_number, uint8_t velocity)
         voice->notes[i] = voice->notes[i - 1];
     }
     voice->notes[0] = note_number;
+    voice->velocity = velocity;
 
     // Update the hardware
-    CAN_DATA_BYTES_MSG data;
     for (voice_t *current = voice; current != NULL; current = current->next_voice) {
         current->set_note(note_number);
-        current->gate_on(velocity);
-        data.byte[0] = A3_VOICE_MSG_SET_NOTE;
-        data.byte[1] = note_number;
-        data.byte[2] = A3_VOICE_MSG_GATE_ON;
-        data.byte[3] = velocity << 1;
-        data.byte[4] = 0;
-        A3SendDataStandard(A3_ID_MIDI_VOICE_BASE + current->id, 5, &data);
+        // CAN set note message should be forwarded here, but splitting the message
+        // confuses the envelope generator for some reason. We send a bundled message
+        // later to detour the issue.
+        current->gate_on_time = timer_counter + GATE_DELAY;
+        task_t task = { .run = SendGateOn, .arg = current};
+        ScheduleTask(task);
     }
     // LED_Driver_PutChar7Seg('N', 0);
     // LED_Driver_Write7SegNumberHex(note_number, 1, 2, LED_Driver_RIGHT_ALIGN);
 
     voice->gate = 1;
     voice->in_use[note_number] = 1;
-    voice->velocity = velocity;
 }
 
 void VoiceReactivateNote(voice_t *voice, uint8_t note_number, uint8_t velocity)
@@ -98,7 +147,9 @@ void VoiceNoteOff(voice_t *voice, uint8_t note_number)
     if (voice->num_notes == 0) {
         voice->gate = 0;
         for (voice_t *current = voice; current != NULL; current = current->next_voice) {
-            current->gate_off();
+            current->gate_off_time = timer_counter + GATE_DELAY;
+            task_t task = { .run = SendGateOff, .arg = current};
+            ScheduleTask(task);
             data.byte[0] = A3_VOICE_MSG_GATE_OFF;
             A3SendDataStandard(A3_ID_MIDI_VOICE_BASE + current->id, 1, &data);
         }

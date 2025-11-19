@@ -55,4 +55,7 @@ typedef struct task {
 
 extern void ScheduleTask(task_t task);
 
+#define TIMER_COUNTER_WRAP 0x7fffffff
+extern uint32_t timer_counter;
+
 /* [] END OF FILE */

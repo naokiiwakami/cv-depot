@@ -53,6 +53,8 @@ typedef struct voice {
     uint8_t velocity;
     uint8_t gate;
     uint8_t in_use[ALL_NOTES];
+    uint32_t gate_on_time;
+    uint32_t gate_off_time;
     void (*set_note)(uint8_t note_number);
     void (*gate_on)(uint8_t velocity);
     void (*gate_off)();

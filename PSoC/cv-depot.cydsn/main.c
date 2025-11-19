@@ -38,6 +38,7 @@
 
 // Interrupt handler declarations
 CY_ISR_PROTO(SwitchHandler);
+CY_ISR_PROTO(CounterHandler);
 
 // Misc setup parameters
 #define LED_Driver_BRIGHTNESS 70
@@ -103,6 +104,7 @@ int main(void)
     LED_Driver_SetBrightness(LED_Driver_BRIGHTNESS, 1);
     LED_Driver_SetBrightness(LED_Driver_BRIGHTNESS, 2);
     isr_SW_StartEx(SwitchHandler);
+    isr_COUNT_StartEx(CounterHandler);
     QuadDec_Start();
 
     InitializeA3Module();
@@ -138,6 +140,13 @@ int main(void)
 CY_ISR(SwitchHandler)
 {
     HandleSwitchEvent();
+}
+
+uint32_t timer_counter = 0;
+CY_ISR(CounterHandler)
+{
+    PWM_Bend_ReadStatusRegister();
+    timer_counter = (timer_counter + 1) & TIMER_COUNTER_WRAP;
 }
 
 #ifdef CAN_MSG_RX_ISR_CALLBACK
