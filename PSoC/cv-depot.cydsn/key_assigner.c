@@ -55,14 +55,11 @@ static void SendGateOn(void *arg)
         return;
     }
     voice->gate_on(voice->velocity);
-    // TODO: Split set note and get on
     CAN_DATA_BYTES_MSG data;
-    data.byte[0] = A3_VOICE_MSG_SET_NOTE;
-    data.byte[1] = voice->notes[0];
-    data.byte[2] = A3_VOICE_MSG_GATE_ON;
-    data.byte[3] = voice->velocity << 1;
-    data.byte[4] = 0;
-    A3SendDataStandard(A3_ID_MIDI_VOICE_BASE + voice->id, 5, &data);
+    data.byte[0] = A3_VOICE_MSG_GATE_ON;
+    data.byte[1] = voice->velocity << 1;
+    data.byte[2] = 0;
+    A3SendDataStandard(A3_ID_MIDI_VOICE_BASE + voice->id, 3, &data);
 }
 
 static void SendGateOff(void *arg)
@@ -95,14 +92,17 @@ void VoiceNoteOn(voice_t *voice, uint8_t note_number, uint8_t velocity)
         voice->notes[i] = voice->notes[i - 1];
     }
     voice->notes[0] = note_number;
-    voice->velocity = velocity;
 
     // Update the hardware
     for (voice_t *current = voice; current != NULL; current = current->next_voice) {
         current->set_note(note_number);
-        // CAN set note message should be forwarded here, but splitting the message
-        // confuses the envelope generator for some reason. We send a bundled message
-        // later to detour the issue.
+        current->velocity = velocity;
+        CAN_DATA_BYTES_MSG data;
+        data.byte[0] = A3_VOICE_MSG_SET_NOTE;
+        data.byte[1] = note_number;
+        A3SendDataStandard(A3_ID_MIDI_VOICE_BASE + current->id, 2, &data);
+        // Gate will rise GATE_DELAY bend PWM cycles later so that the CV recipients
+        // can transit in the mean time.
         current->gate_on_time = timer_counter + GATE_DELAY;
         task_t task = { .run = SendGateOn, .arg = current};
         ScheduleTask(task);
