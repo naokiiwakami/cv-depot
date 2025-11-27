@@ -35,7 +35,8 @@
 #define PROP_KEY_PRIORITY 5
 #define PROP_MIDI_CHANNELS 6
 #define PROP_GATE_TYPE 7
-#define NUM_PROPS 8
+#define PROP_BEND_DEPTH 8
+#define NUM_PROPS 9
 /*
 TBD
 #define PROP_RETRIGGER 7

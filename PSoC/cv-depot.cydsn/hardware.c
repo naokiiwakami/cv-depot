@@ -31,6 +31,9 @@
 #include "voice.h"
 
 uint16_t bend_offset;
+uint16_t bend_octave_width;
+uint32_t bend_halftone_width;
+uint8_t bend_depth;
 
 enum GateType gate_type;
 
@@ -153,25 +156,15 @@ void InitializeVoiceControl()
         gate_type = GATE_TYPE_VELOCITY;
     }
 
-    /*
-    uint8_t temp = EEPROM_ReadByte(ADDR_BEND_OFFSET);
-    if (temp == 0xd1) {
-        temp = EEPROM_ReadByte(ADDR_BEND_OFFSET + 1);
-        bend_offset = temp << 8;
-        temp = EEPROM_ReadByte(ADDR_BEND_OFFSET + 2);
-        bend_offset += temp;
-    } else { // initial value
-        bend_offset = BEND_STEPS / 2;
-    }
-    */
-    // bend_offset = BEND_STEPS / 2;
-
-    // Gates
-    // Gate1Off();
-    // Gate2Off();
-
     // Bend
-    // BendPitch(0x00, PITCH_BEND_CENTER);  // set neutral
+    bend_offset = BEND_STEPS / 2;
+    bend_octave_width = Load16(ADDR_BEND_OCTAVE_WIDTH);
+    bend_halftone_width = ((uint32_t)bend_octave_width << 6) / 12;
+    PWM_Bend_WriteCompare(bend_offset);
+    bend_depth = EEPROM_ReadByte(ADDR_BEND_DEPTH);
+    if (bend_depth == 0 || bend_depth == 0xff) {
+        UpdateBendDepth(4);
+    }
 
     // Portament
     Pin_Portament_En_Write(0);
@@ -182,6 +175,30 @@ void InitializeVoiceControl()
     PotChangePlaceRequest(&pot_portament_1, 2);
     PotChangePlaceRequest(&pot_portament_2, 2);
 
+}
+
+void UpdateBendDepth(uint8_t new_bend_depth)
+{
+    if (new_bend_depth == bend_depth) {
+        // no change, do nothing
+        return;
+    }
+    EEPROM_WriteByte(new_bend_depth, ADDR_BEND_DEPTH);
+    bend_depth = new_bend_depth;
+}
+
+void BendPitch(int16_t bend_amount)
+{
+    uint16_t bend;
+    const uint32_t kMidiBendMaxWidthBits = 13;
+    if (bend_amount >= 0) {
+        uint32_t temp = ((uint32_t)bend_amount * bend_halftone_width * bend_depth) >> (kMidiBendMaxWidthBits + 6);
+        bend = bend_offset + temp;
+    } else {
+        uint32_t temp = ((uint32_t)(-bend_amount) * bend_halftone_width * bend_depth) >> (kMidiBendMaxWidthBits + 6);
+        bend = bend_offset - temp;
+    }
+    PWM_Bend_WriteCompare(bend);
 }
 
 static void InitSysTimer(uint16_t interval_ms)

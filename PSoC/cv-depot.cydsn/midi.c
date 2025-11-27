@@ -27,6 +27,7 @@
 #include "project.h"
 
 #include "eeprom.h"
+#include "hardware.h"
 #include "midi.h"
 #include "key_assigner.h"
 
@@ -76,6 +77,10 @@ midi_config_t midi_config;
 #define C0 0x0B
 #define C4 0x3C
 #define A4 0x45
+
+/* Bend */
+#define BEND_CENTER 8192
+#define BEND_FULL 8192
 
 /*---------------------------------------------------------*/
 /* Macros                                                  */
@@ -249,10 +254,12 @@ void HandleMidiChannelMessage()
     case MSG_CONTROL_CHANGE:
         ControlChange(midi_data[0], midi_data[1]);
         break;
-    case MSG_PITCH_BEND:
-        BendPitch(midi_data[0], midi_data[1]);
-        break;
 #endif
+    case MSG_PITCH_BEND: {
+        int16_t bend_amount = ((midi_data[1] << 7) + midi_data[0]) - BEND_CENTER;
+        BendPitch(bend_amount);
+        break;
+    }
     default:
         // do nothing for unsupported channel messages
         break;

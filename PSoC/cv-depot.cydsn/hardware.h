@@ -49,6 +49,12 @@ extern uint8_t q_full;
 #define BEND_STEPS 1024
 
 extern uint16_t bend_offset;
+extern uint16_t bend_octave_width;
+extern uint32_t bend_halftone_width; // Q26.6
+extern uint8_t bend_depth;
+
+extern void UpdateBendDepth(uint8_t new_bend_depth);
+extern void BendPitch(int16_t bend_amount);
 
 extern void InitializeVoiceControl();
 

@@ -26,6 +26,7 @@
 
 #include "config.h"
 #include "eeprom.h"
+#include "hardware.h"
 #include "key_assigner.h"
 #include "midi.h"
 #include "voice.h"
@@ -108,8 +109,15 @@ a3_property_t config[NUM_PROPS] = {
         .value_type = A3_U8,
         .protected = 0,
         .data = &gate_type,
-        .commit = CommitVectorU8,
+        .commit = CommitInteger,
         .save_addr = ADDR_GATE_TYPE,
+    }, {
+        .id = PROP_BEND_DEPTH,
+        .value_type = A3_U8,
+        .protected = 0,
+        .data = &bend_depth,
+        .commit = CommitInteger,
+        .save_addr = ADDR_BEND_DEPTH,
     },
 };
 

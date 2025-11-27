@@ -44,6 +44,7 @@ static void InitiateKeyAssignSetup();
 static void InitiateMidiChannelSetup1();
 static void InitiateMidiChannelSetup2();
 static void InitiateGateTypeSetup();
+static void InitiateBendDepthSetup();
 
 // Menu items would change by the configuration. The menu is built on demand by the switch interrupt
 // handler. It should be done quickly, so the menu items are kept in the static space.
@@ -52,6 +53,7 @@ static const menu_t kMenuSetChannel1 = { "ch1", InitiateMidiChannelSetup1 }; // 
 static const menu_t kMenuSetChannel2 = { "ch2", InitiateMidiChannelSetup2 }; // for voice 2
 static const menu_t kMenuSetKeyAssignment = { "asn", InitiateKeyAssignSetup };
 static const menu_t kMenuSetGateType = { "gat", InitiateGateTypeSetup };
+static const menu_t kMenuSetBendDepth = { "bnd", InitiateBendDepthSetup };
 static const menu_t kMenuCalibrate = { "cal", Calibrate }; // calibrate the bend center position
 static const menu_t kMenuDiagnose = { "dgn", Diagnose }; // diagnose the hardware
 
@@ -60,7 +62,7 @@ const char *kGateTypeName[GATE_TYPE_END] = { "a3 ", "leg" };
 
 // Setup operation states ///////////////////////
 
-#define MAX_MENU_SIZE 8
+#define MAX_MENU_SIZE 9
 
 struct menu_selection {
     const menu_t *menu[MAX_MENU_SIZE];
@@ -81,6 +83,7 @@ struct setup_state {
         struct menu_selection menu;
         struct midi_setup midi;
         enum GateType gate_type;
+        uint8_t bend_depth;
     } mode;
 };
 
@@ -97,6 +100,7 @@ static void BuildMenu()
     }
     setup_state.mode.menu.menu[i++] = &kMenuSetKeyAssignment;
     setup_state.mode.menu.menu[i++] = &kMenuSetGateType;
+    setup_state.mode.menu.menu[i++] = &kMenuSetBendDepth;
     setup_state.mode.menu.menu[i++] = &kMenuCalibrate;
     setup_state.mode.menu.menu[i++] = &kMenuDiagnose;
     setup_state.mode.menu.menu_size = i;
@@ -150,6 +154,16 @@ void InitiateGateTypeSetup()
     RED_ENCODER_LED_ON();
     setup_state.mode.gate_type = gate_type;
     QuadDec_SetCounter(gate_type);
+    setup_state.prev_counter_value = -1;
+}
+
+void InitiateBendDepthSetup()
+{
+    mode = MODE_BEND_DEPTH_SETUP;
+    GREEN_ENCODER_LED_ON();
+    RED_ENCODER_LED_ON();
+    setup_state.mode.bend_depth = bend_depth;
+    QuadDec_SetCounter(bend_depth - 1);
     setup_state.prev_counter_value = -1;
 }
 
@@ -269,6 +283,24 @@ static void ConfirmGateType()
     mode = MODE_NORMAL;
 }
 
+static void HandleBendDepthSetup()
+{
+    int8_t value = PickUpChangedEncoderValue(24);
+    if (value > 0) {
+        LED_Driver_Write7SegNumberDec(value + 1, 0, 3, LED_Driver_RIGHT_ALIGN);
+        setup_state.mode.bend_depth = value;
+    }
+}
+
+static void ConfirmBendDepth()
+{
+    GREEN_ENCODER_LED_OFF();
+    RED_ENCODER_LED_OFF();
+    UpdateBendDepth(setup_state.mode.bend_depth + 1);
+    StartFinalization();
+    mode = MODE_NORMAL;
+}
+
 // Entry points ///////////////////////////////////////////////////////////////////////////////
 
 /**
@@ -305,6 +337,12 @@ void HandleSettingModes()
     case MODE_GATE_TYPE_CONFIRMED:
         ConfirmGateType();
         break;
+    case MODE_BEND_DEPTH_SETUP:
+        HandleBendDepthSetup();
+        break;
+    case MODE_BEND_DEPTH_CONFIRMED:
+        ConfirmBendDepth();
+        break;
     }
 }
 
@@ -330,6 +368,9 @@ void HandleSwitchEvent()
         break;
     case MODE_GATE_TYPE_SETUP:
         mode = MODE_GATE_TYPE_CONFIRMED;
+        break;
+    case MODE_BEND_DEPTH_SETUP:
+        mode = MODE_BEND_DEPTH_CONFIRMED;
         break;
     case MODE_CALIBRATION_INIT:
         mode = MODE_CALIBRATION_BEND_WIDTH;
