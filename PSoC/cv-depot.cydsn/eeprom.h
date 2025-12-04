@@ -40,6 +40,7 @@
 #define ADDR_NAME 0x20 /* - 0x60 */
 #define ADDR_GATE_TYPE 0x60
 #define ADDR_BEND_DEPTH 0x61
+#define ADDR_EXPRESSION_OR_BREATH 0x62
 
 #define ADDR_UNSET 0xffff
 

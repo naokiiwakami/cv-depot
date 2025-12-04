@@ -50,6 +50,7 @@ midi_config_t midi_config;
 #define MSG_PITCH_BEND        0xE0
 
 /* MIDI Control Changes */
+#define CC_WHEEL                 0x01
 #define CC_BREATH                0x02
 #define CC_EXPRESSION            0x0B
 #define CC_DAMPER_PEDAL          0x40
@@ -117,6 +118,7 @@ void InitializeMidiControllers()
     midi_config.key_assignment_mode = ReadEepromWithValueCheck(ADDR_KEY_ASSIGNMENT_MODE, KEY_ASSIGN_END);
     midi_config.key_priority =
         ReadEepromWithValueCheck(ADDR_KEY_PRIORITY, KEY_PRIORITY_END);
+    midi_config.expression_or_breath = ReadEepromWithValueCheck(ADDR_EXPRESSION_OR_BREATH, 2);
 
     // set A4 to all voices and turn off gates
     for (int i = 0; i < NUM_VOICES; ++i) {
@@ -169,6 +171,9 @@ void CommitMidiConfigChange(const midi_config_t *new_config)
     }
     if (new_config->key_priority != midi_config.key_priority) {
         EEPROM_WriteByte(new_config->key_priority, ADDR_KEY_PRIORITY);
+    }
+    if (new_config->expression_or_breath != midi_config.expression_or_breath) {
+        EEPROM_WriteByte(new_config->key_priority, ADDR_EXPRESSION_OR_BREATH);
     }
 
     // Reflect changes
@@ -234,6 +239,25 @@ void ConsumeMidiByte(uint8_t rx_byte)
     }
 }
 
+void ControlChange(uint8_t controller_number, uint8_t value)
+{
+    switch (controller_number) {
+    case CC_WHEEL:
+        SetModulation(value);
+        break;
+    case CC_EXPRESSION:
+        if (midi_config.expression_or_breath == 0) {
+            SetExpression(value);
+        }
+        break;
+    case CC_BREATH:
+        if (midi_config.expression_or_breath == 1) {
+            SetExpression(value);
+        }
+        break;
+    }
+}
+
 
 void HandleMidiChannelMessage()
 {
@@ -250,11 +274,9 @@ void HandleMidiChannelMessage()
     case MSG_NOTE_ON:
         NoteOn(key_assigner, midi_data[0], midi_data[1]);
         break;
-#if 0
     case MSG_CONTROL_CHANGE:
         ControlChange(midi_data[0], midi_data[1]);
         break;
-#endif
     case MSG_PITCH_BEND: {
         int16_t bend_amount = ((midi_data[1] << 7) + midi_data[0]) - BEND_CENTER;
         BendPitch(bend_amount);

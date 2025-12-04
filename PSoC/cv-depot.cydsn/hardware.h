@@ -56,6 +56,9 @@ extern uint8_t bend_depth;
 extern void UpdateBendDepth(uint8_t new_bend_depth);
 extern void BendPitch(int16_t bend_amount);
 
+extern void SetExpression(uint8_t value);
+extern void SetModulation(uint8_t value);
+
 extern void InitializeVoiceControl();
 
 extern void BlinkGreen(uint16_t interval_ms, uint16_t times);

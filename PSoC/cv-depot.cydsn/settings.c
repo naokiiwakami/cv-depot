@@ -45,6 +45,7 @@ static void InitiateMidiChannelSetup1();
 static void InitiateMidiChannelSetup2();
 static void InitiateGateTypeSetup();
 static void InitiateBendDepthSetup();
+static void InitiateExpressionSetup();
 
 // Menu items would change by the configuration. The menu is built on demand by the switch interrupt
 // handler. It should be done quickly, so the menu items are kept in the static space.
@@ -54,11 +55,13 @@ static const menu_t kMenuSetChannel2 = { "ch2", InitiateMidiChannelSetup2 }; // 
 static const menu_t kMenuSetKeyAssignment = { "asn", InitiateKeyAssignSetup };
 static const menu_t kMenuSetGateType = { "gat", InitiateGateTypeSetup };
 static const menu_t kMenuSetBendDepth = { "bnd", InitiateBendDepthSetup };
-static const menu_t kMenuCalibrate = { "cal", Calibrate }; // calibrate the bend center position
+static const menu_t kMenuSetExpressionOrBreath = { "exp", InitiateExpressionSetup };
+static const menu_t kMenuCalibrate = { "cal", Calibrate }; // calibrate the octave range
 static const menu_t kMenuDiagnose = { "dgn", Diagnose }; // diagnose the hardware
 
 const char *kKeyAssignmentModeName[KEY_ASSIGN_END] = { "duo", "uni", "par" };
 const char *kGateTypeName[GATE_TYPE_END] = { "a3 ", "leg" };
+const char *kExpressionInputName[GATE_TYPE_END] = { "exp ", "brt" };
 
 // Setup operation states ///////////////////////
 
@@ -101,6 +104,7 @@ static void BuildMenu()
     setup_state.mode.menu.menu[i++] = &kMenuSetKeyAssignment;
     setup_state.mode.menu.menu[i++] = &kMenuSetGateType;
     setup_state.mode.menu.menu[i++] = &kMenuSetBendDepth;
+    setup_state.mode.menu.menu[i++] = &kMenuSetExpressionOrBreath;
     setup_state.mode.menu.menu[i++] = &kMenuCalibrate;
     setup_state.mode.menu.menu[i++] = &kMenuDiagnose;
     setup_state.mode.menu.menu_size = i;
@@ -165,6 +169,19 @@ void InitiateBendDepthSetup()
     setup_state.mode.bend_depth = bend_depth;
     QuadDec_SetCounter(bend_depth - 1);
     setup_state.prev_counter_value = -1;
+}
+
+void InitiateExpressionSetup()
+{
+    mode = MODE_EXPRESSION_SETUP;
+    GREEN_ENCODER_LED_ON();
+    RED_ENCODER_LED_ON();
+
+    const midi_config_t *midi_config = GetMidiConfig();
+    QuadDec_SetCounter(midi_config->expression_or_breath);
+    setup_state.prev_counter_value = -1;
+    setup_state.mode.midi.config = *midi_config;
+    setup_state.mode.midi.blink_count = 0;
 }
 
 // Settings event handlers ///////////////////////////////////////////////////
@@ -301,6 +318,25 @@ static void ConfirmBendDepth()
     mode = MODE_NORMAL;
 }
 
+static void HandleExpressionSetup()
+{
+    int8_t value = PickUpChangedEncoderValue(2);
+    if (value >= 0) {
+        LED_Driver_WriteString7Seg(kExpressionInputName[value], 0);
+        setup_state.mode.midi.config.expression_or_breath = value;
+    }
+}
+
+static void ConfirmExpression()
+{
+    GREEN_ENCODER_LED_OFF();
+    RED_ENCODER_LED_OFF();
+    const midi_config_t *midi_config = &setup_state.mode.midi.config;
+    CommitMidiConfigChange(midi_config);
+    StartFinalization();
+    mode = MODE_NORMAL;
+}
+
 // Entry points ///////////////////////////////////////////////////////////////////////////////
 
 /**
@@ -343,6 +379,12 @@ void HandleSettingModes()
     case MODE_BEND_DEPTH_CONFIRMED:
         ConfirmBendDepth();
         break;
+    case MODE_EXPRESSION_SETUP:
+        HandleExpressionSetup();
+        break;
+    case MODE_EXPRESSION_CONFIRMED:
+        ConfirmExpression();
+        break;
     }
 }
 
@@ -371,6 +413,9 @@ void HandleSwitchEvent()
         break;
     case MODE_BEND_DEPTH_SETUP:
         mode = MODE_BEND_DEPTH_CONFIRMED;
+        break;
+    case MODE_EXPRESSION_SETUP:
+        mode = MODE_EXPRESSION_CONFIRMED;
         break;
     case MODE_CALIBRATION_INIT:
         mode = MODE_CALIBRATION_BEND_WIDTH;

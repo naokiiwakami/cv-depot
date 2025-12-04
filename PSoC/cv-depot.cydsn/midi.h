@@ -37,6 +37,7 @@ typedef struct midi_config {
     enum KeyAssignmentMode key_assignment_mode;
     uint8_t channels[NUM_VOICES];  // MIDI channels for notes
     enum KeyPriority key_priority;
+    uint8_t expression_or_breath; // 0: expression, 1: breath
 } midi_config_t;
 
 // The master MIDI config

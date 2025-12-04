@@ -118,6 +118,13 @@ a3_property_t config[NUM_PROPS] = {
         .data = &bend_depth,
         .commit = CommitInteger,
         .save_addr = ADDR_BEND_DEPTH,
+    }, {
+        .id = PROP_EXPRESSION_OR_BREATH,
+        .value_type = A3_U8,
+        .protected = 0,
+        .data = &midi_config.expression_or_breath,
+        .commit = CommitInteger,
+        .save_addr = ADDR_EXPRESSION_OR_BREATH,
     },
 };
 

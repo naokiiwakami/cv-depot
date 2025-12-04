@@ -56,6 +56,7 @@ uint8_t q_full = 0;
 #define VELOCITY_FACTOR \
     (uint32_t) (((GATE_DAC_STEPS - GATE_ON_POINT) << FIXED_POINT_BITSHIFT) / MAX_VELOCITY / MAX_VELOCITY)
 #define VELOCITY_DAC_VALUE(velocity) ((((velocity) * (velocity) * (VELOCITY_FACTOR)) >> FIXED_POINT_BITSHIFT) + GATE_ON_POINT)
+#define MODULATION_DAC_VALUE(modulation) ((((uint16_t)(modulation) * (uint16_t)(modulation)) >> 4) + ((uint16_t)modulation << 3))
 #define INDICATOR_VALUE(velocity) ((velocity) >= 64 ? (((velocity) - 63)  * ((velocity) - 63)) / 32 - 1 : 0)
 #define NOTE_PWM_MAX_VALUE 120
 
@@ -175,6 +176,11 @@ void InitializeVoiceControl()
     PotChangePlaceRequest(&pot_portament_1, 2);
     PotChangePlaceRequest(&pot_portament_2, 2);
 
+    // Expression
+    SetExpression(0);
+
+    // Modulation
+    SetModulation(0);
 }
 
 void UpdateBendDepth(uint8_t new_bend_depth)
@@ -199,6 +205,18 @@ void BendPitch(int16_t bend_amount)
         bend = bend_offset - temp;
     }
     PWM_Bend_WriteCompare(bend);
+}
+
+void SetExpression(uint8_t value)
+{
+    uint16_t amount = MODULATION_DAC_VALUE(value);
+    DVDAC_Expression_SetValue(amount);
+}
+
+void SetModulation(uint8_t value)
+{
+    uint16_t amount = MODULATION_DAC_VALUE(value);
+    DVDAC_Modulation_SetValue(amount);
 }
 
 static void InitSysTimer(uint16_t interval_ms)
