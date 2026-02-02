@@ -65,9 +65,7 @@
 #define A3_MC_ASSIGN_MODULE_ID 0x02
 #define A3_MC_PING 0x03
 #define A3_MC_REQUEST_NAME 0x04
-#define A3_MC_CONTINUE_NAME 0x05
-#define A3_MC_REQUEST_CONFIG 0x06
-#define A3_MC_CONTINUE_CONFIG 0x07
+#define A3_MC_REQUEST_CONFIG 0x05
 #define A3_MC_MODIFY_CONFIG 0x08
 
 /* Individual module opcodes */
@@ -76,6 +74,14 @@
 
 #define A3_DATA_LENGTH 8
 #define A3_MAX_CONFIG_DATA_LENGTH 64
+
+/* Stream status */
+enum StreamStatus {
+    StreamStatusReady = 0,
+    StreamStatusBusy = 1,
+    StreamStatusNotSupported = 2,
+    StreamStatusNoSuchStream = 3,
+};
 
 enum A3PropertyValueType {
     A3_U8,

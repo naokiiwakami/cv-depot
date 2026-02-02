@@ -79,33 +79,48 @@ void A3SendDataExtended(uint32_t id, uint8_t dlc, CAN_DATA_BYTES_MSG *data)
 // Stream control ////////////////////////////////////////////////////////////////////////
 
 // communication states
+enum CurrentStream {
+    kCurrentStreamNone,
+    kCurrentStreamGetName,
+    kCurrentStreamGetConfig,
+    kCurrentStreamSetProps,
+};
+
 static struct stream_state {
+    enum CurrentStream current_stream;
     uint32_t prop_position;
     uint32_t data_position;
-    uint32_t wire_addr;
+    uint32_t wire_id;
 
     uint8_t num_remaining_properties;
     uint8_t data_size;
+    uint8_t num_properties_sent;
 } stream_state = {
+    .current_stream = kCurrentStreamNone,
     .prop_position = 0,
     .data_position = 0,
-    .wire_addr = A3_ID_INVALID,
+    .wire_id = A3_ID_INVALID,
     .num_remaining_properties = 0,
     .data_size = 0,
+    .num_properties_sent = 0,
 };
 
 /**
  * Initializes the admin wire for writes.
  *
- * @param wire_addr - wire ID to start
+ * @param wire_id - wire ID to start
  * @param prop_start_index - starting index of the properties
  * @param num_props - number of properties to send
+ * @param stream - type of stream to initiate
  */
-static void InitiateWireWrites(uint32_t wire_addr, int prop_start_index, int num_props)
+static void InitiateWireWrites(uint32_t wire_id, int prop_start_index, int num_props,
+    enum CurrentStream stream)
 {
-    stream_state.wire_addr = wire_addr;
+    stream_state.current_stream = stream;
+    stream_state.wire_id = wire_id;
     stream_state.prop_position = prop_start_index;
     stream_state.num_remaining_properties = num_props;
+    stream_state.num_properties_sent = 0;
 }
 
 #define NOWHERE 0xffffffff
@@ -113,17 +128,32 @@ static void InitiateWireWrites(uint32_t wire_addr, int prop_start_index, int num
 /**
  * Initializes the admin wire for writes.
  *
- * @param wire_addr - wire ID to start
+ * @param wire_id - wire ID to start
  * @param prop_start_index - starting index of the properties
  * @param num_props - number of properties to send
+ * @param stream - type of stream to initiate
  */
-static void InitiateWireReads(uint32_t wire_addr)
+static void InitiateWireReads(uint32_t wire_id, enum CurrentStream stream)
 {
-    stream_state.wire_addr = wire_addr;
+    stream_state.current_stream = stream;
+    stream_state.wire_id = wire_id;
     stream_state.prop_position = NOWHERE;
     stream_state.num_remaining_properties = 0;
     stream_state.data_position = 0;
     stream_state.data_size = 0;
+}
+
+/**
+ * Terminate the wire by clearing current stream states.
+ */
+static void TerminateWire()
+{
+    stream_state.wire_id = A3_ID_INVALID;
+    stream_state.prop_position = 0;
+    stream_state.data_position = 0;
+    stream_state.num_remaining_properties = 0;
+    stream_state.current_stream = kCurrentStreamNone;
+    stream_state.num_properties_sent = 0;
 }
 
 /**
@@ -138,8 +168,8 @@ static void CheckForTransferTermination(uint32_t property_data_length)
         ++stream_state.prop_position;
         --stream_state.num_remaining_properties;
         if (stream_state.num_remaining_properties == 0) {
-            // entire transfer completed. clear the wire ID
-            stream_state.wire_addr = A3_ID_INVALID;
+            // entire transfer completed. terminate the stream
+            TerminateWire();
         }
     }
 }
@@ -147,14 +177,6 @@ static void CheckForTransferTermination(uint32_t property_data_length)
 static uint8_t DoneStream()
 {
     return stream_state.num_remaining_properties == 0;
-}
-
-static void TerminateWire()
-{
-    stream_state.wire_addr = A3_ID_INVALID;
-    stream_state.prop_position = 0;
-    stream_state.data_position = 0;
-    stream_state.num_remaining_properties = 0;
 }
 
 #define MIN(x, y) ((x) < (y) ? (x) : (y))
@@ -300,58 +322,75 @@ static void RequestUidCancel(uint32_t id)
 
 static void HandleRequestName(can_message_t *message)
 {
-    uint32_t wire_addr = message->data[2] + A3_ID_ADMIN_WIRES_BASE;
-    InitiateWireWrites(wire_addr, PROP_MODULE_NAME, 1);
+    uint32_t wire_id = message->data[2] + A3_ID_ADMIN_WIRES_BASE;
     CAN_DATA_BYTES_MSG data;
-    int payload_index = FillPropertyData(&data, 0);
-    A3SendDataStandard(wire_addr, payload_index, &data);
+    if (stream_state.current_stream == kCurrentStreamNone) {
+        data.byte[0] = StreamStatusReady;
+        A3SendDataStandard(wire_id, 1, &data);
+        InitiateWireWrites(wire_id, PROP_MODULE_NAME, 1, kCurrentStreamGetName);
+    } else {
+        data.byte[0] = StreamStatusBusy;
+        A3SendDataStandard(wire_id, 1, &data);
+    }
 }
 
 static void HandleContinueName()
 {
-    uint32_t wire_addr = stream_state.wire_addr;
-    if (wire_addr == A3_ID_INVALID) {
+    uint32_t wire_id = stream_state.wire_id;
+    if (wire_id == A3_ID_INVALID) {
         // no active stream, ignore.
         return;
     }
     CAN_DATA_BYTES_MSG data;
     int payload_index = FillPropertyData(&data, 0);
-    A3SendDataStandard(wire_addr, payload_index, &data);
+    A3SendDataStandard(wire_id, payload_index, &data);
 }
 
 static void HandleRequestConfig(can_message_t *message)
 {
-    uint32_t wire_addr = message->data[2] + A3_ID_ADMIN_WIRES_BASE;
-    InitiateWireWrites(wire_addr, 0, NUM_PROPS);
-    int payload_index = 0;
+    uint32_t wire_id = message->data[2] + A3_ID_ADMIN_WIRES_BASE;
     CAN_DATA_BYTES_MSG data;
-    data.byte[payload_index++] = NUM_PROPS;
-    while (payload_index < A3_DATA_LENGTH && !DoneStream()) {
-        payload_index = FillPropertyData(&data, payload_index);
+    if (stream_state.current_stream == kCurrentStreamNone) {
+        data.byte[0] = StreamStatusReady;
+        A3SendDataStandard(wire_id, 1, &data);
+        InitiateWireWrites(wire_id, 0, NUM_PROPS, kCurrentStreamGetConfig);
+    } else {
+        data.byte[0] = StreamStatusBusy;
+        A3SendDataStandard(wire_id, 1, &data);
     }
-    A3SendDataStandard(wire_addr, payload_index, &data);
 }
 
 static void HandleContinueConfig()
 {
-    uint32_t wire_addr = stream_state.wire_addr;
-    if (wire_addr == A3_ID_INVALID) {
+    uint32_t wire_id = stream_state.wire_id;
+    if (wire_id == A3_ID_INVALID) {
         // no active stream, ignore.
         return;
     }
     int payload_index = 0;
     CAN_DATA_BYTES_MSG data;
+    if (!stream_state.num_properties_sent) {
+        data.byte[payload_index++] = stream_state.num_remaining_properties;
+        stream_state.num_properties_sent = 1;
+    }
     while (payload_index < A3_DATA_LENGTH && !DoneStream()) {
         payload_index = FillPropertyData(&data, payload_index);
     }
-    A3SendDataStandard(wire_addr, payload_index, &data);
+    A3SendDataStandard(wire_id, payload_index, &data);
 }
 
 static void HandleModifyConfig(can_message_t *message)
 {
-    uint32_t wire_addr = message->data[2] + A3_ID_ADMIN_WIRES_BASE;
-    InitiateWireReads(wire_addr);
-    A3SendRemoteFrameStandard(wire_addr);
+    uint32_t wire_id = message->data[2] + A3_ID_ADMIN_WIRES_BASE;
+    CAN_DATA_BYTES_MSG data;
+    if (stream_state.current_stream == kCurrentStreamNone) {
+        data.byte[0] = StreamStatusReady;
+        A3SendDataStandard(wire_id, 1, &data);
+        InitiateWireReads(wire_id, kCurrentStreamSetProps);
+    } else {
+        data.byte[0] = StreamStatusBusy;
+        A3SendDataStandard(wire_id, 1, &data);
+    }
 }
 
 static void HandleMissionControlCommand(uint8_t opcode, can_message_t *message)
@@ -369,14 +408,8 @@ static void HandleMissionControlCommand(uint8_t opcode, can_message_t *message)
     case A3_MC_REQUEST_NAME:
         HandleRequestName(message);
         break;
-    case A3_MC_CONTINUE_NAME:
-        HandleContinueName();
-        break;
     case A3_MC_REQUEST_CONFIG:
         HandleRequestConfig(message);
-        break;
-    case A3_MC_CONTINUE_CONFIG:
-        HandleContinueConfig();
         break;
     case A3_MC_MODIFY_CONFIG:
         HandleModifyConfig(message);
@@ -525,17 +558,30 @@ static void ReadDataFrame(can_message_t *message)
             TerminateWire();
             break;
         }
-        A3SendRemoteFrameStandard(stream_state.wire_addr);
+        CAN_DATA_BYTES_MSG data;
+        A3SendDataStandard(stream_state.wire_id, 0, &data);
+        A3SendRemoteFrameStandard(stream_state.wire_id);
     }
 }
 
 static void HandleGeneralStandardMessage(can_message_t *message)
 {
-    if (message->id != stream_state.wire_addr) {
-        return;
+    if (message->id == stream_state.wire_id) {
+        switch (stream_state.current_stream) {
+        case kCurrentStreamGetName:
+            HandleContinueName();
+            break;
+        case kCurrentStreamGetConfig:
+            HandleContinueConfig();
+            break;
+        case kCurrentStreamSetProps:
+            ReadDataFrame(message);
+            break;
+        case kCurrentStreamNone:
+            // shouldn't happen, ignore silently
+            break;
+        }
     }
-    // The message is a data frame to the current wire address
-    ReadDataFrame(message);
 }
 
 void HandleGeneralMessage(void *arg)
