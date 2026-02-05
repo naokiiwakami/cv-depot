@@ -49,20 +49,6 @@ void A3SendDataStandard(uint32_t id, uint8_t dlc, CAN_DATA_BYTES_MSG *data)
     CAN_SendMsg(&message);
 }
 
-void A3SendRemoteFrameStandard(uint32_t id)
-{
-    // CAN_DATA_BYTES_MSG msg;
-    CAN_TX_MSG message = {
-        .id = id,
-        .rtr = 1,
-        .ide = 0,
-        .dlc = 0,
-        .irq = 0,
-        .msg = NULL,
-    };
-    CAN_SendMsg(&message);
-}
-
 void A3SendDataExtended(uint32_t id, uint8_t dlc, CAN_DATA_BYTES_MSG *data)
 {
     CAN_TX_MSG message = {
@@ -560,7 +546,6 @@ static void ReadDataFrame(can_message_t *message)
         }
         CAN_DATA_BYTES_MSG data;
         A3SendDataStandard(stream_state.wire_id, 0, &data);
-        A3SendRemoteFrameStandard(stream_state.wire_id);
     }
 }
 
